@@ -1,66 +1,54 @@
-# PrepPulse - Full-Stack MERN Online Exam & NEET Test Booklet Platform
+# PrepPulse - Full-Stack MERN Online Exam & Test Booklet Platform
 
-PrepPulse is a full-stack **Online Exam / Quiz Platform** built using MongoDB, Express.js, React.js, and Node.js with Tailwind CSS, KaTeX LaTeX math support, tab-switch proctoring, instant synchronous server-side grading, and a printable NEET/JEE test booklet export engine.
-
----
-
-## 🌟 Core Features
-
-### 1. Teacher / Admin Console
-- **Exam Builder**: Create/edit exams with title, duration, test booklet code, and customizable positive (`+4`) and negative (`-1`) marking scheme.
-- **LaTeX Question Builder**: Add multiple-choice questions (Physics, Chemistry, Botany, Zoology, General) with live KaTeX LaTeX equation rendering ($v = 3\sqrt{x}$, $\frac{a}{b}$, $\text{CO}_2$).
-- **Step-by-Step Worked Solutions**: Store step-by-step solutions for every question, shown to students after test submission.
-- **Class Analytics**: View total submissions, class average, highest score, lowest score, pass rate (≥40%), and individual student attempt records with tab-switch warning logs.
-- **NEET Printable Test Booklet PDF Engine**: Generate proctor-ready test booklets with cover page, candidate input box, continuous 2-column question layout, answer key grid, and hints & solutions section.
-
-### 2. Student Exam Portal
-- **Distraction-Free Exam Engine**: Full-screen prompt on entry, fixed countdown timer, auto-submit when time expires.
-- **Tab Visibility / Proctoring**: Warns and logs every browser tab switch or window blur event.
-- **Continuous Question Palette**: Navigate between questions, mark for review, filter by subject.
-- **Background Auto-Save**: Automatically saves candidate progress every 15 seconds.
-- **Instant Server-Side Evaluation**: Immediate synchronous score calculation (+4 for correct, -1 for incorrect, 0 for unattempted) and detailed solution breakdown.
+PrepPulse is a full-stack **Online Exam / Quiz Platform** built using MongoDB, Express.js, React.js, and Node.js with Tailwind CSS, KaTeX LaTeX math support, tab-switch proctoring, real-time OTP verification, and a NEET/JEE-style printable test booklet export engine.
 
 ---
 
-## 🔑 Pre-Seeded Credentials
+## 🔑 Pre-Seeded Demo Credentials
 
-The backend automatically seeds demo accounts on first run:
+The backend automatically seeds these standard accounts when first launched:
 
-| Role | Email | Password |
+| Role | Email / Identifier | Password | Access Level |
+| :--- | :--- | :--- | :--- |
+| **Super Admin** | `admin@school.com` | `admin123` | Control Panel (`/admin/manage`), Manage Teachers & Students |
+| **Teacher** | `teacher@school.com` or `9876543210` | `teacher123` | Exam Repository (`/admin`), Question Builder, Booklet Export |
+| **Student** | `student@school.com` or `9123456789` | `student123` | Exam Portal (`/dashboard`), Test Engine, Score Breakdown |
+
+---
+
+## ⚙️ Production Environment Variables (Render Deployment)
+
+Set these environment variables in your deployment dashboard settings (e.g., Render, Railway, or Heroku):
+
+| Variable Name | Required? | Example / Description |
 | :--- | :--- | :--- |
-| **Teacher / Admin** | `admin@exam.com` | `admin123` |
-| **Student** | `student@exam.com` | `student123` |
+| `PORT` | Optional | `5000` (Defaults to 5000) |
+| `NODE_ENV` | **Required** | `production` |
+| `MONGODB_URI` | **Required** | `mongodb+srv://<user>:<password>@cluster.mongodb.net/online_exam_db` |
+| `JWT_SECRET` | **Required** | `your_random_secure_jwt_secret_string_32_chars` |
+| `SMTP_HOST` | Optional | `smtp.sendgrid.net` (For Email OTP delivery) |
+| `SMTP_PORT` | Optional | `587` |
+| `SMTP_USER` | Optional | `apikey` |
+| `SMTP_PASS` | Optional | `your_sendgrid_api_key` |
+| `TWILIO_ACCOUNT_SID` | Optional | `your_twilio_account_sid` (For SMS OTP delivery) |
+| `TWILIO_AUTH_TOKEN` | Optional | `your_twilio_auth_token` |
+| `TWILIO_PHONE_NUMBER` | Optional | `+18005550199` |
+
+> ℹ️ *Note*: In local development (`NODE_ENV !== 'production'`), if `MONGODB_URI` is not set, an in-memory MongoDB database starts automatically. In production, `MONGODB_URI` and `JWT_SECRET` are strictly enforced to prevent data loss or security issues.
 
 ---
 
-## 🚀 Quick Setup & Running Locally
+## 🚀 Local Development Setup
 
-### Prerequisites
-- Node.js (v18+)
-- MongoDB (Optional — built-in **`mongodb-memory-server`** automatically triggers if local MongoDB is not running, guaranteeing zero-setup execution!)
+1. Install server and client dependencies:
+   ```bash
+   npm run install:all
+   ```
 
-### Installation
+2. Start the application locally:
+   ```bash
+   # Runs backend (port 5000) & frontend (port 3000) concurrently
+   npm run dev
+   ```
 
-1. Install root, server, and client dependencies:
-```bash
-# Install dependencies in server
-cd server
-npm install
-
-# Install dependencies in client
-cd ../client
-npm install
-```
-
-2. Start the application:
-```bash
-# Terminal 1: Run Backend Server (Port 5000)
-cd server
-npm start
-
-# Terminal 2: Run Frontend Client (Port 3000)
-cd client
-npm run dev
-```
-
-3. Open your browser at `http://localhost:3000`. Use the **"One-Click Demo Logins"** on the login page to quickly test as Admin or Student!
+3. Open `http://localhost:3000` in your browser.

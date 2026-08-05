@@ -1,21 +1,31 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
+// Enforce JWT_SECRET requirement
+const getJwtSecret = () => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    console.error('❌ FATAL ERROR: JWT_SECRET environment variable is not defined on server.');
+    process.exit(1);
+  }
+  return secret;
+};
+
 const verifyToken = async (req, res, next) => {
   try {
     let token = null;
 
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
-      token = req.headers.authorization.split(' ')[1];
-    } else if (req.cookies && req.cookies.token) {
+    if (req.cookies && req.cookies.token) {
       token = req.cookies.token;
+    } else if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+      token = req.headers.authorization.split(' ')[1];
     }
 
     if (!token) {
       return res.status(401).json({ success: false, message: 'Access denied. No token provided.' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_exam_platform_jwt_key_2026');
+    const decoded = jwt.verify(token, getJwtSecret());
     const user = await User.findById(decoded.id).select('-password');
 
     if (!user) {
@@ -39,7 +49,6 @@ const verifyRole = (allowedRoles = []) => {
       return res.status(401).json({ success: false, message: 'Authentication required.' });
     }
 
-    // Role mapping: 'admin' is super-admin, 'teacher' is teacher, 'student' is student
     if (!allowedRoles.includes(req.user.role)) {
       return res.status(403).json({
         success: false,
@@ -54,4 +63,4 @@ const verifyRole = (allowedRoles = []) => {
 const verifyAdmin = verifyRole(['admin']);
 const verifyTeacherOrAdmin = verifyRole(['admin', 'teacher']);
 
-module.exports = { verifyToken, verifyRole, verifyAdmin, verifyTeacherOrAdmin };
+module.exports = { verifyToken, verifyRole, verifyAdmin, verifyTeacherOrAdmin, getJwtSecret };

@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const dotenv = require('dotenv');
 const connectDB = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
@@ -7,15 +8,23 @@ const examRoutes = require('./routes/examRoutes');
 const questionRoutes = require('./routes/questionRoutes');
 const resultRoutes = require('./routes/resultRoutes');
 const bookletRoutes = require('./routes/bookletRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 const seedData = require('./utils/seed');
 const User = require('./models/User');
 
 dotenv.config();
 
+// Enforce JWT_SECRET on server boot
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+  console.error('❌ FATAL ERROR: JWT_SECRET environment variable is required in production.');
+  process.exit(1);
+}
+
 const app = express();
 
 // Middleware
 app.use(cors({ origin: true, credentials: true }));
+app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -23,8 +32,6 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', serverTime: new Date().toISOString(), app: 'Online Exam Platform API' });
 });
-
-const adminRoutes = require('./routes/adminRoutes');
 
 // API Routes
 app.use('/api/auth', authRoutes);

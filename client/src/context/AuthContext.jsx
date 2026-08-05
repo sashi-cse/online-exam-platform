@@ -5,38 +5,31 @@ const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token') || null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchMe = async () => {
-      if (!token) {
-        setLoading(false);
-        return;
-      }
-      try {
-        const res = await api.get('/auth/me');
-        if (res.data.success) {
-          setUser(res.data.user);
-        } else {
-          logout();
-        }
-      } catch (err) {
-        console.error('Auth verification failed:', err);
-        logout();
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchMe();
-  }, [token]);
+  }, []);
+
+  const fetchMe = async () => {
+    try {
+      const res = await api.get('/auth/me');
+      if (res.data.success) {
+        setUser(res.data.user);
+      } else {
+        setUser(null);
+      }
+    } catch (err) {
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loginPassword = async (identifier, password, role) => {
     const res = await api.post('/auth/login-password', { identifier, password, role });
     if (res.data.success) {
-      localStorage.setItem('token', res.data.token);
-      setToken(res.data.token);
+      if (res.data.token) localStorage.setItem('token', res.data.token);
       setUser(res.data.user);
       return res.data;
     }
@@ -49,9 +42,8 @@ export const AuthProvider = ({ children }) => {
 
   const verifyOtp = async (identifier, otpCode, role) => {
     const res = await api.post('/auth/verify-otp', { identifier, otpCode, role });
-    if (res.data.success && res.data.token) {
-      localStorage.setItem('token', res.data.token);
-      setToken(res.data.token);
+    if (res.data.success && res.data.user) {
+      if (res.data.token) localStorage.setItem('token', res.data.token);
       setUser(res.data.user);
     }
     return res.data;
@@ -70,17 +62,21 @@ export const AuthProvider = ({ children }) => {
     return res.data;
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    setToken(null);
-    setUser(null);
+  const logout = async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch (e) {
+      console.warn('Logout request failed:', e);
+    } finally {
+      localStorage.removeItem('token');
+      setUser(null);
+    }
   };
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        token,
         loading,
         loginPassword,
         sendOtp,

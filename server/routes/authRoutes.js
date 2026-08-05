@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
 const Otp = require('../models/Otp');
-const { verifyToken } = require('../middleware/auth');
+const { verifyToken, getJwtSecret } = require('../middleware/auth');
 const { generateOtpCode, sendOtpNotification } = require('../utils/otpService');
 
 const router = express.Router();
@@ -21,9 +21,38 @@ const otpRateLimiter = rateLimit({
 const generateToken = (user) => {
   return jwt.sign(
     { id: user._id, role: user.role, email: user.email, phone: user.phone, name: user.name },
-    process.env.JWT_SECRET || 'super_secret_exam_platform_jwt_key_2026',
+    getJwtSecret(),
     { expiresIn: '7d' }
   );
+};
+
+const sendAuthResponse = (res, user, message = 'Authentication successful!') => {
+  const token = generateToken(user);
+
+  // Set HTTP-Only Cookie
+  res.cookie('token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  });
+
+  return res.json({
+    success: true,
+    message,
+    token, // Also return in body for client flexibility
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      rollNumber: user.rollNumber,
+      department: user.department,
+      isVerified: user.isVerified,
+      isActive: user.isActive,
+    },
+  });
 };
 
 // @route   POST /api/auth/send-otp
@@ -39,17 +68,12 @@ router.post('/send-otp', otpRateLimiter, async (req, res) => {
     const cleanIdentifier = identifier.trim().toLowerCase();
     const isEmail = cleanIdentifier.includes('@');
 
-    // Generate 6-digit code & hash it
     const rawOtp = generateOtpCode();
     const salt = await bcrypt.genSalt(10);
     const hashedOtp = await bcrypt.hash(rawOtp, salt);
-
-    // Expire in 10 minutes
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    // Delete existing pending OTPs for this identifier
     await Otp.deleteMany({ identifier: cleanIdentifier });
-
     await Otp.create({
       identifier: cleanIdentifier,
       otp: hashedOtp,
@@ -57,12 +81,11 @@ router.post('/send-otp', otpRateLimiter, async (req, res) => {
       attempts: 0,
     });
 
-    // Dispatch notification
     await sendOtpNotification(cleanIdentifier, rawOtp, isEmail);
 
     res.json({
       success: true,
-      message: `A 6-digit OTP code has been sent to ${cleanIdentifier}. Check console logs or inbox.`,
+      message: `A 6-digit OTP code has been sent to ${cleanIdentifier}.`,
       expiresInSeconds: 600,
     });
   } catch (err) {
@@ -71,7 +94,7 @@ router.post('/send-otp', otpRateLimiter, async (req, res) => {
 });
 
 // @route   POST /api/auth/verify-otp
-// @desc    Verify 6-digit OTP and complete login / verification
+// @desc    Verify 6-digit OTP code with explicit expiration and deactivation check
 router.post('/verify-otp', async (req, res) => {
   try {
     const { identifier, otpCode, role } = req.body;
@@ -87,13 +110,18 @@ router.post('/verify-otp', async (req, res) => {
       return res.status(400).json({ success: false, message: 'OTP expired or not found. Please request a new OTP.' });
     }
 
+    // Explicit Expiry Check (Task 6)
+    if (otpRecord.expiresAt < new Date()) {
+      await Otp.deleteOne({ _id: otpRecord._id });
+      return res.status(400).json({ success: false, message: 'OTP code has expired. Please request a new OTP.' });
+    }
+
     // Lockout check: max 5 failed attempts
     if (otpRecord.attempts >= 5) {
       await Otp.deleteOne({ _id: otpRecord._id });
       return res.status(429).json({ success: false, message: 'Maximum OTP verification attempts exceeded. Request a new OTP.' });
     }
 
-    // Match OTP hash
     const isMatch = await bcrypt.compare(otpCode.trim(), otpRecord.otp);
     if (!isMatch) {
       otpRecord.attempts += 1;
@@ -101,21 +129,27 @@ router.post('/verify-otp', async (req, res) => {
       return res.status(400).json({ success: false, message: `Invalid OTP code. ${5 - otpRecord.attempts} attempts remaining.` });
     }
 
-    // Delete used OTP
     await Otp.deleteOne({ _id: otpRecord._id });
 
-    // Find associated user
     let user = await User.findOne({
       $or: [{ email: cleanIdentifier }, { phone: identifier.trim() }],
     });
 
     if (user) {
-      // Role enforcement check
+      // Deactivated Account Check (Task 7)
+      if (!user.isActive) {
+        return res.status(403).json({
+          success: false,
+          message: 'Account is deactivated. Please contact your administrator.',
+        });
+      }
+
+      // Role check
       if (role && user.role !== role) {
         const userRoleLabel = user.role === 'admin' ? 'Super Admin' : user.role === 'teacher' ? 'Teacher' : 'Student';
         return res.status(400).json({
           success: false,
-          message: `This account is registered as a ${userRoleLabel}. Please use the ${userRoleLabel} login tab.`,
+          message: `This account is registered as a ${userRoleLabel}. Please switch to the ${userRoleLabel} portal tab.`,
         });
       }
 
@@ -124,22 +158,7 @@ router.post('/verify-otp', async (req, res) => {
         await user.save();
       }
 
-      const token = generateToken(user);
-      return res.json({
-        success: true,
-        message: 'OTP verified successfully!',
-        token,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          phone: user.phone,
-          role: user.role,
-          rollNumber: user.rollNumber,
-          department: user.department,
-          isVerified: user.isVerified,
-        },
-      });
+      return sendAuthResponse(res, user, 'OTP verified successfully!');
     }
 
     res.json({ success: true, message: 'OTP verified successfully! You may now complete account registration.' });
@@ -149,7 +168,7 @@ router.post('/verify-otp', async (req, res) => {
 });
 
 // @route   POST /api/auth/register
-// @desc    Register a new student or teacher account and send OTP
+// @desc    Register a new student or teacher account
 router.post('/register', async (req, res) => {
   try {
     const { name, email, phone, password, role, rollNumber, department } = req.body;
@@ -165,7 +184,6 @@ router.post('/register', async (req, res) => {
     const cleanEmail = email ? email.trim().toLowerCase() : null;
     const cleanPhone = phone ? phone.trim() : null;
 
-    // Check for existing account
     const queryConditions = [];
     if (cleanEmail) queryConditions.push({ email: cleanEmail });
     if (cleanPhone) queryConditions.push({ phone: cleanPhone });
@@ -184,8 +202,6 @@ router.post('/register', async (req, res) => {
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
-    
-    // Assign role: 'teacher' or 'student'. ('admin' cannot be publicly registered)
     const userRole = role === 'teacher' || role === 'admin' ? 'teacher' : 'student';
 
     const user = await User.create({
@@ -194,12 +210,11 @@ router.post('/register', async (req, res) => {
       phone: cleanPhone,
       password: hashedPassword,
       role: userRole,
-      isVerified: false, // Requires OTP verification
+      isVerified: false,
       rollNumber: rollNumber || '',
       department: department || '',
     });
 
-    // Send verification OTP code automatically
     const identifier = cleanEmail || cleanPhone;
     const rawOtp = generateOtpCode();
     const otpSalt = await bcrypt.genSalt(10);
@@ -219,16 +234,23 @@ router.post('/register', async (req, res) => {
     res.status(201).json({
       success: true,
       requiresOtp: true,
-      message: `${userRole === 'teacher' ? 'Teacher' : 'Student'} account created! A 6-digit verification OTP code was sent to ${identifier}.`,
+      message: `${userRole === 'teacher' ? 'Teacher' : 'Student'} account created! An OTP verification code was sent to ${identifier}.`,
       identifier,
     });
   } catch (err) {
+    // Handle MongoDB Duplicate Key Error (Code 11000 - Task 5)
+    if (err.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'An account with this Email Address or Mobile Number already exists.',
+      });
+    }
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
 // @route   POST /api/auth/login-password
-// @desc    Password-based login with role enforcement
+// @desc    Password-based login with deactivation and role enforcement
 router.post('/login-password', async (req, res) => {
   try {
     const { identifier, password, role } = req.body;
@@ -250,7 +272,15 @@ router.post('/login-password', async (req, res) => {
       return res.status(401).json({ success: false, message: 'Account not found. Please check your credentials or register.' });
     }
 
-    // Role check: 'admin' (super-admin), 'teacher', 'student'
+    // Deactivated Account Check (Task 7)
+    if (!user.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: 'Account is deactivated. Please contact your administrator.',
+      });
+    }
+
+    // Role check
     if (role && user.role !== role) {
       const userRoleLabel = user.role === 'admin' ? 'Super Admin' : user.role === 'teacher' ? 'Teacher' : 'Student';
       return res.status(400).json({
@@ -273,25 +303,16 @@ router.post('/login-password', async (req, res) => {
       });
     }
 
-    const token = generateToken(user);
-
-    res.json({
-      success: true,
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-        rollNumber: user.rollNumber,
-        department: user.department,
-        isVerified: user.isVerified,
-      },
-    });
+    return sendAuthResponse(res, user, 'Login successful!');
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
+});
+
+// @route   POST /api/auth/logout
+router.post('/logout', (req, res) => {
+  res.clearCookie('token');
+  res.json({ success: true, message: 'Logged out successfully.' });
 });
 
 // @route   GET /api/auth/me
@@ -308,6 +329,7 @@ router.get('/me', verifyToken, async (req, res) => {
         rollNumber: req.user.rollNumber,
         department: req.user.department,
         isVerified: req.user.isVerified,
+        isActive: req.user.isActive,
       },
     });
   } catch (err) {

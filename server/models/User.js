@@ -12,11 +12,13 @@ const UserSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
       sparse: true,
+      unique: true, // Ensures strict uniqueness in MongoDB database
     },
     phone: {
       type: String,
       trim: true,
       sparse: true,
+      unique: true, // Ensures strict uniqueness in MongoDB database
     },
     password: {
       type: String,
@@ -30,11 +32,11 @@ const UserSchema = new mongoose.Schema(
     },
     isVerified: {
       type: Boolean,
-      default: false, // Must verify OTP to activate account
+      default: false,
     },
     isActive: {
       type: Boolean,
-      default: true, // Admin can deactivate accounts
+      default: true,
     },
     rollNumber: {
       type: String,
