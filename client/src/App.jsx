@@ -13,6 +13,7 @@ import ExamTaking from './pages/ExamTaking';
 import ExamResult from './pages/ExamResult';
 import AdminAnalytics from './pages/AdminAnalytics';
 import BookletPreview from './pages/BookletPreview';
+import AdminManagement from './pages/AdminManagement';
 
 const AppRoutes = () => {
   const { user } = useAuth();
@@ -22,26 +23,45 @@ const AppRoutes = () => {
       <Navbar />
       <Routes>
         {/* Public Auth Routes */}
-        <Route path="/login" element={user ? <Navigate to={user.role === 'admin' ? '/admin' : '/dashboard'} replace /> : <Login />} />
-        <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <Register />} />
+        <Route
+          path="/login"
+          element={
+            user
+              ? <Navigate to={user.role === 'admin' ? '/admin/manage' : user.role === 'teacher' ? '/admin' : '/dashboard'} replace />
+              : <Login />
+          }
+        />
+        <Route
+          path="/register"
+          element={
+            user
+              ? <Navigate to={user.role === 'admin' ? '/admin/manage' : user.role === 'teacher' ? '/admin' : '/dashboard'} replace />
+              : <Register />
+          }
+        />
 
         {/* Protected Student Routes */}
-        <Route element={<ProtectedRoute allowedRoles={['student', 'admin']} />}>
+        <Route element={<ProtectedRoute allowedRoles={['student', 'teacher', 'admin']} />}>
           <Route path="/dashboard" element={<StudentDashboard />} />
           <Route path="/my-results" element={<StudentDashboard />} />
           <Route path="/exam/take/:examId" element={<ExamTaking />} />
           <Route path="/result/:resultId" element={<ExamResult />} />
         </Route>
 
-        {/* Protected Admin Routes */}
-        <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+        {/* Protected Teacher & Admin Exam Routes */}
+        <Route element={<ProtectedRoute allowedRoles={['teacher', 'admin']} />}>
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/exam/:id" element={<ExamManage />} />
           <Route path="/admin/exam/:examId/analytics" element={<AdminAnalytics />} />
         </Route>
 
+        {/* Protected Super Admin Management Route */}
+        <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+          <Route path="/admin/manage" element={<AdminManagement />} />
+        </Route>
+
         {/* Booklet Export Print Route */}
-        <Route element={<ProtectedRoute allowedRoles={['admin', 'student']} />}>
+        <Route element={<ProtectedRoute allowedRoles={['teacher', 'admin', 'student']} />}>
           <Route path="/booklet/print/:examId" element={<BookletPreview />} />
         </Route>
 

@@ -24,12 +24,15 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', serverTime: new Date().toISOString(), app: 'Online Exam Platform API' });
 });
 
+const adminRoutes = require('./routes/adminRoutes');
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/exams', examRoutes);
 app.use('/api/questions', questionRoutes);
 app.use('/api/results', resultRoutes);
 app.use('/api/booklet', bookletRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Serve static frontend in production / deployment
 const path = require('path');

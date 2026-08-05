@@ -15,30 +15,51 @@ const seedData = async () => {
     await Exam.deleteMany({});
     await Question.deleteMany({});
 
-    console.log('👤 Seeding Admin & Student accounts...');
+    console.log('👤 Seeding Super Admin, Teacher & Student accounts...');
     const salt = await bcrypt.genSalt(10);
     const adminPassword = await bcrypt.hash('admin123', salt);
+    const teacherPassword = await bcrypt.hash('teacher123', salt);
     const studentPassword = await bcrypt.hash('student123', salt);
 
-    const admin = await User.create({
-      name: 'Dr. Sharma (Physics & Chemistry Teacher)',
-      email: 'admin@exam.com',
-      phone: '9876543210',
+    // 1. Super Admin Account (Role: 'admin')
+    const superAdmin = await User.create({
+      name: 'System Super Administrator',
+      email: 'admin@school.com',
+      phone: '9000000000',
       password: adminPassword,
       role: 'admin',
-      department: 'Physics & Chemistry',
+      isVerified: true,
+      isActive: true,
     });
 
+    // 2. Teacher Account (Role: 'teacher')
+    const teacher = await User.create({
+      name: 'Dr. Sharma (Physics & Chemistry Teacher)',
+      email: 'teacher@school.com',
+      phone: '9876543210',
+      password: teacherPassword,
+      role: 'teacher',
+      department: 'Physics & Chemistry',
+      isVerified: true,
+      isActive: true,
+    });
+
+    // 3. Student Account (Role: 'student')
     const student = await User.create({
       name: 'Rahul Verma',
-      email: 'student@exam.com',
+      email: 'student@school.com',
       phone: '9123456789',
       password: studentPassword,
       role: 'student',
       rollNumber: 'NEET-2026-001',
+      isVerified: true,
+      isActive: true,
     });
 
-    console.log(`✅ Accounts Created:\n   Admin: admin@exam.com / 9876543210 (Pass: admin123)\n   Student: student@exam.com / 9123456789 (Pass: student123)`);
+    console.log(`✅ Seed Accounts Created:`);
+    console.log(`   👑 Super Admin : admin@school.com (Pass: admin123)`);
+    console.log(`   👨‍🏫 Teacher     : teacher@school.com / 9876543210 (Pass: teacher123)`);
+    console.log(`   🎓 Student     : student@school.com / 9123456789 (Pass: student123)`);
 
     console.log('📝 Seeding NEET Entrance Exam & Questions with LaTeX math...');
 
@@ -58,7 +79,7 @@ const seedData = async () => {
         'Equations use standard LaTeX formatting. Check step-by-step solutions after submission.',
         'Do not switch browser tabs or exit fullscreen mode during the test.'
       ],
-      createdBy: admin._id,
+      createdBy: teacher._id,
     });
 
     const sampleQuestions = [
@@ -68,7 +89,7 @@ const seedData = async () => {
         subject: 'Physics',
         questionText: 'A particle moves along a straight line such that its velocity varies with displacement $x$ as $v = 3\\sqrt{x}$ m/s. What is the acceleration of the particle?',
         options: ['1.5 m/s²', '4.5 m/s²', '9.0 m/s²', '3.0 m/s²'],
-        correctOption: 1, // 4.5 m/s²
+        correctOption: 1,
         marksForCorrect: 4,
         negativeMarksForIncorrect: 1,
         solution: 'Acceleration $a = v \\frac{dv}{dx}$. Given $v = 3x^{1/2}$, we have $\\frac{dv}{dx} = 3 \\cdot \\frac{1}{2} x^{-1/2}$. Therefore, $a = (3\\sqrt{x}) \\left(\\frac{3}{2\\sqrt{x}}\\right) = \\frac{9}{2} = 4.5 \\text{ m/s}^2$.',
@@ -79,7 +100,7 @@ const seedData = async () => {
         subject: 'Physics',
         questionText: 'What is the equivalent resistance between points A and B in a infinite ladder network where each resistor has resistance $R = 6 \\,\\Omega$?',
         options: ['3 Ω', '6 Ω', '9 Ω', '12 Ω'],
-        correctOption: 1, // 6 Ω
+        correctOption: 1,
         marksForCorrect: 4,
         negativeMarksForIncorrect: 1,
         solution: 'For an infinite ladder of equal resistors $R$, the equivalent resistance $R_{eq}$ satisfies $R_{eq} = R + \\frac{R \\cdot R_{eq}}{R + R_{eq}}$. Solving the quadratic equation yields $R_{eq} = R = 6 \\,\\Omega$.',
@@ -90,7 +111,7 @@ const seedData = async () => {
         subject: 'Chemistry',
         questionText: 'Which of the following compounds has the highest bond angle around the central atom according to VSEPR theory?',
         options: ['$\\text{NH}_3$', '$\\text{H}_2\\text{O}$', '$\\text{CH}_4$', '$\\text{CO}_2$'],
-        correctOption: 3, // CO2 (180 deg)
+        correctOption: 3,
         marksForCorrect: 4,
         negativeMarksForIncorrect: 1,
         solution: '$\\text{CO}_2$ has $sp$ hybridization with linear geometry and a bond angle of $180^\\circ$. $\\text{CH}_4$ is $109.5^\\circ$, $\\text{NH}_3$ is $107^\\circ$, and $\\text{H}_2\\text{O}$ is $104.5^\\circ$.',
@@ -101,7 +122,7 @@ const seedData = async () => {
         subject: 'Chemistry',
         questionText: 'The pH of a $10^{-8} \\text{ M}$ solution of $\\text{HCl}$ in water at $25^\\circ\\text{C}$ is approximately:',
         options: ['8.00', '6.98', '7.00', '6.00'],
-        correctOption: 1, // 6.98
+        correctOption: 1,
         marksForCorrect: 4,
         negativeMarksForIncorrect: 1,
         solution: 'Water auto-ionization must be considered because $[\\text{H}^+]_{\\text{water}} = 10^{-7} \\text{ M}$. Total $[\\text{H}^+] = 10^{-8} + 10^{-7} = 1.1 \\times 10^{-7} \\text{ M}$. Taking $\\text{pH} = -\\log_{10}(1.1 \\times 10^{-7}) \\approx 6.98$.',
@@ -112,7 +133,7 @@ const seedData = async () => {
         subject: 'Botany',
         questionText: 'During oxygenic photosynthesis, the primary electron donor for Photosystem II (PS II) is:',
         options: ['$\\text{CO}_2$', '$\\text{H}_2\\text{O}$', 'NADPH', 'ATP'],
-        correctOption: 1, // H2O
+        correctOption: 1,
         marksForCorrect: 4,
         negativeMarksForIncorrect: 1,
         solution: 'Water photolysis in the oxygen-evolving complex of PS II splits $2\\text{H}_2\\text{O} \\rightarrow \\text{O}_2 + 4\\text{H}^+ + 4e^-$, supplying electrons to replace those excited from $P680$.',
@@ -123,7 +144,7 @@ const seedData = async () => {
         subject: 'Zoology',
         questionText: 'Which hormone triggers ovulation and the formation of the corpus luteum in human females?',
         options: ['FSH (Follicle Stimulating Hormone)', 'LH (Luteinizing Hormone)', 'Estrogen', 'Progesterone'],
-        correctOption: 1, // LH
+        correctOption: 1,
         marksForCorrect: 4,
         negativeMarksForIncorrect: 1,
         solution: 'A rapid surge in Luteinizing Hormone (LH surge) around mid-cycle (day 14) induces rupture of the Graafian follicle, ovulation, and transformation into the corpus luteum.',
@@ -132,7 +153,6 @@ const seedData = async () => {
 
     await Question.insertMany(sampleQuestions);
 
-    // Calculate and save total marks for the exam
     const totalMarks = sampleQuestions.reduce((sum, q) => sum + q.marksForCorrect, 0);
     neetExam.totalMarks = totalMarks;
     await neetExam.save();
@@ -143,7 +163,6 @@ const seedData = async () => {
   }
 };
 
-// Execute if run directly
 if (require.main === module) {
   seedData().then(() => {
     console.log('🌱 Seeding process complete!');

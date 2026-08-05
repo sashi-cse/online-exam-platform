@@ -17,9 +17,13 @@ const verifyToken = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_exam_platform_jwt_key_2026');
     const user = await User.findById(decoded.id).select('-password');
-    
+
     if (!user) {
       return res.status(401).json({ success: false, message: 'User account not found.' });
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({ success: false, message: 'Account is deactivated. Please contact your administrator.' });
     }
 
     req.user = user;
@@ -29,11 +33,25 @@ const verifyToken = async (req, res, next) => {
   }
 };
 
-const verifyAdmin = (req, res, next) => {
-  if (!req.user || req.user.role !== 'admin') {
-    return res.status(403).json({ success: false, message: 'Forbidden. Admin privileges required.' });
-  }
-  next();
+const verifyRole = (allowedRoles = []) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ success: false, message: 'Authentication required.' });
+    }
+
+    // Role mapping: 'admin' is super-admin, 'teacher' is teacher, 'student' is student
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: `Forbidden. Role '${req.user.role}' is not authorized to access this resource.`,
+      });
+    }
+
+    next();
+  };
 };
 
-module.exports = { verifyToken, verifyAdmin };
+const verifyAdmin = verifyRole(['admin']);
+const verifyTeacherOrAdmin = verifyRole(['admin', 'teacher']);
+
+module.exports = { verifyToken, verifyRole, verifyAdmin, verifyTeacherOrAdmin };

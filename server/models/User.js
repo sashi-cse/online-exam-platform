@@ -11,12 +11,12 @@ const UserSchema = new mongoose.Schema(
       type: String,
       lowercase: true,
       trim: true,
-      sparse: true, // Allows null/empty while ensuring uniqueness if provided
+      sparse: true,
     },
     phone: {
       type: String,
       trim: true,
-      sparse: true, // Allows mobile number based login
+      sparse: true,
     },
     password: {
       type: String,
@@ -25,8 +25,16 @@ const UserSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['student', 'admin'],
+      enum: ['admin', 'teacher', 'student'],
       default: 'student',
+    },
+    isVerified: {
+      type: Boolean,
+      default: false, // Must verify OTP to activate account
+    },
+    isActive: {
+      type: Boolean,
+      default: true, // Admin can deactivate accounts
     },
     rollNumber: {
       type: String,
