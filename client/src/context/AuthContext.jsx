@@ -32,8 +32,8 @@ export const AuthProvider = ({ children }) => {
     fetchMe();
   }, [token]);
 
-  const login = async (email, password) => {
-    const res = await api.post('/auth/login', { email, password });
+  const login = async (identifier, password) => {
+    const res = await api.post('/auth/login', { identifier, password });
     if (res.data.success) {
       localStorage.setItem('token', res.data.token);
       setToken(res.data.token);
@@ -42,8 +42,16 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const register = async (name, email, password, role = 'student') => {
-    const res = await api.post('/auth/register', { name, email, password, role });
+  const register = async (name, email, phone, password, role = 'student', rollNumber = '', department = '') => {
+    const res = await api.post('/auth/register', {
+      name,
+      email,
+      phone,
+      password,
+      role,
+      rollNumber,
+      department,
+    });
     if (res.data.success) {
       localStorage.setItem('token', res.data.token);
       setToken(res.data.token);

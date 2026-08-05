@@ -8,37 +8,59 @@ const router = express.Router();
 
 const generateToken = (user) => {
   return jwt.sign(
-    { id: user._id, role: user.role, email: user.email, name: user.name },
+    { id: user._id, role: user.role, email: user.email, phone: user.phone, name: user.name },
     process.env.JWT_SECRET || 'super_secret_exam_platform_jwt_key_2026',
     { expiresIn: '7d' }
   );
 };
 
 // @route   POST /api/auth/register
-// @desc    Register a new student or teacher account
+// @desc    Register a new student or teacher account using Mobile Number or Email
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, phone, password, role, rollNumber, department } = req.body;
 
-    if (!name || !email || !password) {
-      return res.status(400).json({ success: false, message: 'Name, email, and password are required.' });
+    if (!name || !password) {
+      return res.status(400).json({ success: false, message: 'Name and password are required.' });
     }
 
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
-    if (existingUser) {
-      return res.status(400).json({ success: false, message: 'An account with this email already exists.' });
+    if (!email && !phone) {
+      return res.status(400).json({ success: false, message: 'Either Email Address or Mobile Number is required.' });
+    }
+
+    // Clean inputs
+    const cleanEmail = email ? email.trim().toLowerCase() : null;
+    const cleanPhone = phone ? phone.trim() : null;
+
+    // Check for existing account by email or phone
+    const queryConditions = [];
+    if (cleanEmail) queryConditions.push({ email: cleanEmail });
+    if (cleanPhone) queryConditions.push({ phone: cleanPhone });
+
+    if (queryConditions.length > 0) {
+      const existingUser = await User.findOne({ $or: queryConditions });
+      if (existingUser) {
+        if (cleanEmail && existingUser.email === cleanEmail) {
+          return res.status(400).json({ success: false, message: 'An account with this Email Address already exists.' });
+        }
+        if (cleanPhone && existingUser.phone === cleanPhone) {
+          return res.status(400).json({ success: false, message: 'An account with this Mobile Number already exists.' });
+        }
+      }
     }
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
-
     const userRole = role === 'admin' ? 'admin' : 'student';
 
     const user = await User.create({
       name,
-      email: email.toLowerCase(),
+      email: cleanEmail,
+      phone: cleanPhone,
       password: hashedPassword,
       role: userRole,
+      rollNumber: rollNumber || '',
+      department: department || '',
     });
 
     const token = generateToken(user);
@@ -51,7 +73,10 @@ router.post('/register', async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
+        phone: user.phone,
         role: user.role,
+        rollNumber: user.rollNumber,
+        department: user.department,
       },
     });
   } catch (err) {
@@ -60,23 +85,32 @@ router.post('/register', async (req, res) => {
 });
 
 // @route   POST /api/auth/login
-// @desc    Login for students & admins
+// @desc    Login for students & admins using Email OR Mobile Number
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { identifier, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Email and password are required.' });
+    if (!identifier || !password) {
+      return res.status(400).json({ success: false, message: 'Mobile Number/Email and password are required.' });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const cleanIdentifier = identifier.trim().toLowerCase();
+
+    // Search by email OR phone number
+    const user = await User.findOne({
+      $or: [
+        { email: cleanIdentifier },
+        { phone: identifier.trim() },
+      ],
+    });
+
     if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials.' });
+      return res.status(401).json({ success: false, message: 'Invalid Mobile Number/Email or password.' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials.' });
+      return res.status(401).json({ success: false, message: 'Invalid Mobile Number/Email or password.' });
     }
 
     const token = generateToken(user);
@@ -88,7 +122,10 @@ router.post('/login', async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
+        phone: user.phone,
         role: user.role,
+        rollNumber: user.rollNumber,
+        department: user.department,
       },
     });
   } catch (err) {
@@ -106,7 +143,10 @@ router.get('/me', verifyToken, async (req, res) => {
         id: req.user._id,
         name: req.user.name,
         email: req.user.email,
+        phone: req.user.phone,
         role: req.user.role,
+        rollNumber: req.user.rollNumber,
+        department: req.user.department,
       },
     });
   } catch (err) {

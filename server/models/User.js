@@ -9,10 +9,14 @@ const UserSchema = new mongoose.Schema(
     },
     email: {
       type: String,
-      required: [true, 'Email is required'],
-      unique: true,
       lowercase: true,
       trim: true,
+      sparse: true, // Allows null/empty while ensuring uniqueness if provided
+    },
+    phone: {
+      type: String,
+      trim: true,
+      sparse: true, // Allows mobile number based login
     },
     password: {
       type: String,
@@ -23,6 +27,16 @@ const UserSchema = new mongoose.Schema(
       type: String,
       enum: ['student', 'admin'],
       default: 'student',
+    },
+    rollNumber: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    department: {
+      type: String,
+      trim: true,
+      default: '',
     },
   },
   { timestamps: true }

@@ -23,18 +23,22 @@ const seedData = async () => {
     const admin = await User.create({
       name: 'Dr. Sharma (Physics & Chemistry Teacher)',
       email: 'admin@exam.com',
+      phone: '9876543210',
       password: adminPassword,
       role: 'admin',
+      department: 'Physics & Chemistry',
     });
 
     const student = await User.create({
       name: 'Rahul Verma',
       email: 'student@exam.com',
+      phone: '9123456789',
       password: studentPassword,
       role: 'student',
+      rollNumber: 'NEET-2026-001',
     });
 
-    console.log(`✅ Accounts Created:\n   Admin: admin@exam.com / admin123\n   Student: student@exam.com / student123`);
+    console.log(`✅ Accounts Created:\n   Admin: admin@exam.com / 9876543210 (Pass: admin123)\n   Student: student@exam.com / 9123456789 (Pass: student123)`);
 
     console.log('📝 Seeding NEET Entrance Exam & Questions with LaTeX math...');
 
