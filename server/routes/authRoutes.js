@@ -15,7 +15,7 @@ const generateToken = (user) => {
 };
 
 // @route   POST /api/auth/register
-// @desc    Register a new student or teacher account using Mobile Number or Email
+// @desc    Register a new student or teacher account
 router.post('/register', async (req, res) => {
   try {
     const { name, email, phone, password, role, rollNumber, department } = req.body;
@@ -67,7 +67,7 @@ router.post('/register', async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: `${userRole === 'admin' ? 'Teacher' : 'Student'} registration successful!`,
+      message: `${userRole === 'admin' ? 'Teacher' : 'Student'} account created successfully!`,
       token,
       user: {
         id: user._id,
@@ -85,18 +85,18 @@ router.post('/register', async (req, res) => {
 });
 
 // @route   POST /api/auth/login
-// @desc    Login for students & admins using Email OR Mobile Number
+// @desc    Login for students & teachers with role verification
 router.post('/login', async (req, res) => {
   try {
-    const { identifier, password } = req.body;
+    const { identifier, password, role } = req.body;
 
     if (!identifier || !password) {
-      return res.status(400).json({ success: false, message: 'Mobile Number/Email and password are required.' });
+      return res.status(400).json({ success: false, message: 'Email/Mobile Number and Password are required.' });
     }
 
     const cleanIdentifier = identifier.trim().toLowerCase();
 
-    // Search by email OR phone number
+    // Search user by Email or Mobile Number
     const user = await User.findOne({
       $or: [
         { email: cleanIdentifier },
@@ -105,12 +105,22 @@ router.post('/login', async (req, res) => {
     });
 
     if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid Mobile Number/Email or password.' });
+      return res.status(401).json({ success: false, message: 'Account not found. Please check your Email/Mobile Number or Register a new account.' });
+    }
+
+    // Role strict check
+    if (role && user.role !== role) {
+      const userRoleLabel = user.role === 'admin' ? 'Teacher' : 'Student';
+      const targetRoleLabel = role === 'admin' ? 'Teacher' : 'Student';
+      return res.status(400).json({
+        success: false,
+        message: `This account is registered as a ${userRoleLabel}. Please switch to the ${userRoleLabel} login tab.`,
+      });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(401).json({ success: false, message: 'Invalid Mobile Number/Email or password.' });
+      return res.status(401).json({ success: false, message: 'Incorrect password. Please try again.' });
     }
 
     const token = generateToken(user);
