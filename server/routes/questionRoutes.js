@@ -1,7 +1,7 @@
 const express = require('express');
 const Question = require('../models/Question');
 const Exam = require('../models/Exam');
-const { verifyToken, verifyAdmin } = require('../middleware/auth');
+const { verifyToken, verifyTeacherOrAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -12,16 +12,26 @@ const updateExamTotalMarks = async (examId) => {
   await Exam.findByIdAndUpdate(examId, { totalMarks: total });
 };
 
+// Helper to check exam ownership for questions
+const checkExamOwnership = async (examId, user) => {
+  if (user.role === 'teacher') {
+    const exam = await Exam.findById(examId);
+    if (!exam || (exam.createdBy && exam.createdBy.toString() !== user._id.toString())) {
+      return false;
+    }
+  }
+  return true;
+};
+
 // @route   GET /api/questions/exam/:examId
 // @desc    Get all questions for an exam
-// SECURITY: Omit `correctOption` and `solution` if requested by student during an exam taking process!
+// SECURITY FIX: ALWAYS strip `correctOption` and `solution` for student role, regardless of mode!
 router.get('/exam/:examId', verifyToken, async (req, res) => {
   try {
-    const { mode } = req.query; // mode=take for exam taking mode
     const questions = await Question.find({ examId: req.params.examId }).sort({ questionNumber: 1 });
 
     let sanitizedQuestions = questions;
-    if (req.user.role === 'student' && mode === 'take') {
+    if (req.user.role === 'student') {
       sanitizedQuestions = questions.map((q) => {
         const obj = q.toObject();
         delete obj.correctOption;
@@ -37,12 +47,16 @@ router.get('/exam/:examId', verifyToken, async (req, res) => {
 });
 
 // @route   POST /api/questions/exam/:examId
-// @desc    Create a question for an exam (Admin only)
-router.post('/exam/:examId', verifyToken, verifyAdmin, async (req, res) => {
+// @desc    Create a question for an exam (Teacher or Admin)
+router.post('/exam/:examId', verifyToken, verifyTeacherOrAdmin, async (req, res) => {
   try {
     const exam = await Exam.findById(req.params.examId);
     if (!exam) {
       return res.status(404).json({ success: false, message: 'Exam not found.' });
+    }
+
+    if (req.user.role === 'teacher' && exam.createdBy && exam.createdBy.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Forbidden. You can only add questions to exams created by you.' });
     }
 
     const {
@@ -60,7 +74,6 @@ router.post('/exam/:examId', verifyToken, verifyAdmin, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Question text, at least 2 options, and correct option are required.' });
     }
 
-    // Determine continuous question number if not passed
     let qNum = questionNumber;
     if (!qNum) {
       const count = await Question.countDocuments({ examId: exam._id });
@@ -88,12 +101,17 @@ router.post('/exam/:examId', verifyToken, verifyAdmin, async (req, res) => {
 });
 
 // @route   PUT /api/questions/:id
-// @desc    Update a question (Admin only)
-router.put('/:id', verifyToken, verifyAdmin, async (req, res) => {
+// @desc    Update a question (Teacher or Admin)
+router.put('/:id', verifyToken, verifyTeacherOrAdmin, async (req, res) => {
   try {
     const question = await Question.findById(req.params.id);
     if (!question) {
       return res.status(404).json({ success: false, message: 'Question not found.' });
+    }
+
+    const isOwner = await checkExamOwnership(question.examId, req.user);
+    if (!isOwner) {
+      return res.status(403).json({ success: false, message: 'Forbidden. You can only edit questions for exams created by you.' });
     }
 
     Object.assign(question, req.body);
@@ -108,12 +126,17 @@ router.put('/:id', verifyToken, verifyAdmin, async (req, res) => {
 });
 
 // @route   DELETE /api/questions/:id
-// @desc    Delete a question (Admin only)
-router.delete('/:id', verifyToken, verifyAdmin, async (req, res) => {
+// @desc    Delete a question (Teacher or Admin)
+router.delete('/:id', verifyToken, verifyTeacherOrAdmin, async (req, res) => {
   try {
     const question = await Question.findById(req.params.id);
     if (!question) {
       return res.status(404).json({ success: false, message: 'Question not found.' });
+    }
+
+    const isOwner = await checkExamOwnership(question.examId, req.user);
+    if (!isOwner) {
+      return res.status(403).json({ success: false, message: 'Forbidden. You can only delete questions for exams created by you.' });
     }
 
     const examId = question.examId;

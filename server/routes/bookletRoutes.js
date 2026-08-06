@@ -1,17 +1,22 @@
 const express = require('express');
 const Exam = require('../models/Exam');
 const Question = require('../models/Question');
-const { verifyToken } = require('../middleware/auth');
+const { verifyToken, verifyTeacherOrAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
 // @route   GET /api/booklet/exam/:examId
-// @desc    Get complete data package for Test Booklet printing & export
-router.get('/exam/:examId', verifyToken, async (req, res) => {
+// @desc    Get complete data package for Test Booklet printing & export (Teacher / Admin ONLY)
+router.get('/exam/:examId', verifyToken, verifyTeacherOrAdmin, async (req, res) => {
   try {
     const exam = await Exam.findById(req.params.examId);
     if (!exam) {
       return res.status(404).json({ success: false, message: 'Exam not found.' });
+    }
+
+    // Teacher ownership check
+    if (req.user.role === 'teacher' && exam.createdBy && exam.createdBy.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Forbidden. You can only view booklets for exams you created.' });
     }
 
     const questions = await Question.find({ examId: exam._id }).sort({ questionNumber: 1 });

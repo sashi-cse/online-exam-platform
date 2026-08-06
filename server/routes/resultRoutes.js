@@ -2,7 +2,7 @@ const express = require('express');
 const Result = require('../models/Result');
 const Exam = require('../models/Exam');
 const Question = require('../models/Question');
-const { verifyToken, verifyAdmin } = require('../middleware/auth');
+const { verifyToken, verifyTeacherOrAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -71,6 +71,13 @@ const evaluateAttempt = async (result, isAutoSubmit = false) => {
   return result;
 };
 
+// Helper: Check if exam time limit has expired (with 60-second latency grace period)
+const isExamTimeExpired = (result, exam) => {
+  const startTimeMs = new Date(result.startTime).getTime();
+  const maxAllowedMs = (exam.durationMinutes * 60 + 60) * 1000; // 60s grace period for network delay
+  return Date.now() - startTimeMs > maxAllowedMs;
+};
+
 // @route   POST /api/results/start/:examId
 // @desc    Start or resume an exam attempt
 router.post('/start/:examId', verifyToken, async (req, res) => {
@@ -80,7 +87,7 @@ router.post('/start/:examId', verifyToken, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Exam not found.' });
     }
 
-    if (!exam.isPublished && req.user.role !== 'admin') {
+    if (!exam.isPublished && req.user.role === 'student') {
       return res.status(403).json({ success: false, message: 'Exam is not currently published.' });
     }
 
@@ -98,6 +105,18 @@ router.post('/start/:examId', verifyToken, async (req, res) => {
           resultId: existingResult._id,
         });
       }
+
+      // Time limit check on resume
+      if (isExamTimeExpired(existingResult, exam)) {
+        const autoSubmittedResult = await evaluateAttempt(existingResult, true);
+        return res.status(400).json({
+          success: false,
+          alreadySubmitted: true,
+          message: 'Exam time limit expired. Your attempt has been auto-submitted.',
+          resultId: autoSubmittedResult._id,
+        });
+      }
+
       return res.json({ success: true, isResume: true, result: existingResult });
     }
 
@@ -127,7 +146,7 @@ router.post('/start/:examId', verifyToken, async (req, res) => {
 });
 
 // @route   POST /api/results/save-progress/:resultId
-// @desc    Auto-save current progress and log tab switch violations
+// @desc    Auto-save current progress and log tab switch violations (Enforces Server-Side Time Limit)
 router.post('/save-progress/:resultId', verifyToken, async (req, res) => {
   try {
     const result = await Result.findById(req.params.resultId);
@@ -141,6 +160,26 @@ router.post('/save-progress/:resultId', verifyToken, async (req, res) => {
 
     if (result.status !== 'in_progress') {
       return res.status(400).json({ success: false, message: 'Exam has already been submitted.' });
+    }
+
+    const exam = await Exam.findById(result.examId);
+    if (!exam) {
+      return res.status(404).json({ success: false, message: 'Exam record not found.' });
+    }
+
+    // Task 4: Server-Side Time-Limit Enforcement
+    if (isExamTimeExpired(result, exam)) {
+      const { answers } = req.body;
+      if (answers && Array.isArray(answers)) {
+        result.answers = answers;
+      }
+      const gradedResult = await evaluateAttempt(result, true);
+      return res.status(400).json({
+        success: false,
+        isTimeExpired: true,
+        message: 'Exam duration has expired. Attempt has been auto-submitted.',
+        result: gradedResult,
+      });
     }
 
     const { answers, tabSwitchCount, violation } = req.body;
@@ -169,7 +208,7 @@ router.post('/save-progress/:resultId', verifyToken, async (req, res) => {
 });
 
 // @route   POST /api/results/submit/:resultId
-// @desc    Submit exam and trigger SYNCHRONOUS server-side grading
+// @desc    Submit exam and trigger SYNCHRONOUS server-side grading (Enforces Server-Side Time Limit)
 router.post('/submit/:resultId', verifyToken, async (req, res) => {
   try {
     const result = await Result.findById(req.params.resultId);
@@ -185,6 +224,7 @@ router.post('/submit/:resultId', verifyToken, async (req, res) => {
       return res.json({ success: true, message: 'Exam was already submitted.', result });
     }
 
+    const exam = await Exam.findById(result.examId);
     const { answers, tabSwitchCount, isAutoSubmit } = req.body;
 
     if (answers && Array.isArray(answers)) {
@@ -195,8 +235,11 @@ router.post('/submit/:resultId', verifyToken, async (req, res) => {
       result.tabSwitchCount = tabSwitchCount;
     }
 
+    // Force auto submit if time limit expired
+    const forceAuto = isAutoSubmit || (exam && isExamTimeExpired(result, exam));
+
     // Evaluate score on server synchronously
-    const gradedResult = await evaluateAttempt(result, Boolean(isAutoSubmit));
+    const gradedResult = await evaluateAttempt(result, Boolean(forceAuto));
 
     res.json({
       success: true,
@@ -212,7 +255,10 @@ router.post('/submit/:resultId', verifyToken, async (req, res) => {
 // @desc    Get all completed exam results for logged in student
 router.get('/my-results', verifyToken, async (req, res) => {
   try {
-    const results = await Result.find({ studentId: req.user._id })
+    const results = await Result.find({
+      studentId: req.user._id,
+      status: { $in: ['submitted', 'auto_submitted'] },
+    })
       .populate('examId', 'title subject durationMinutes bookletCode')
       .sort({ createdAt: -1 });
 
@@ -223,19 +269,24 @@ router.get('/my-results', verifyToken, async (req, res) => {
 });
 
 // @route   GET /api/results/exam/:examId/analytics
-// @desc    Get aggregated analytics & all student attempts for an exam (Admin only)
-router.get('/exam/:examId/analytics', verifyToken, verifyAdmin, async (req, res) => {
+// @desc    Get aggregated analytics & all student attempts for an exam (Teacher or Admin)
+router.get('/exam/:examId/analytics', verifyToken, verifyTeacherOrAdmin, async (req, res) => {
   try {
     const exam = await Exam.findById(req.params.examId);
     if (!exam) {
       return res.status(404).json({ success: false, message: 'Exam not found.' });
     }
 
+    // Task 5: Scoped analytics access for teachers
+    if (req.user.role === 'teacher' && exam.createdBy && exam.createdBy.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Forbidden. You can only view analytics for exams created by you.' });
+    }
+
     const results = await Result.find({
       examId: exam._id,
       status: { $in: ['submitted', 'auto_submitted'] },
     })
-      .populate('studentId', 'name email')
+      .populate('studentId', 'name email phone rollNumber')
       .sort({ score: -1 });
 
     let highestScore = 0;
@@ -247,7 +298,7 @@ router.get('/exam/:examId/analytics', verifyToken, verifyAdmin, async (req, res)
       highestScore = Math.max(...results.map((r) => r.score));
       lowestScore = Math.min(...results.map((r) => r.score));
       sumScore = results.reduce((acc, r) => acc + r.score, 0);
-      passCount = results.filter((r) => r.percentage >= 40).length; // 40% passing threshold
+      passCount = results.filter((r) => r.percentage >= 40).length;
     } else {
       lowestScore = 0;
     }
@@ -273,50 +324,68 @@ router.get('/exam/:examId/analytics', verifyToken, verifyAdmin, async (req, res)
 });
 
 // @route   GET /api/results/:resultId
-// @desc    Get detailed report breakdown for a specific attempt (with questions & worked solutions)
+// @desc    Get detailed report breakdown for a specific attempt (Task 3: Never leak answers for in_progress attempts)
 router.get('/:resultId', verifyToken, async (req, res) => {
   try {
     const result = await Result.findById(req.params.resultId)
-      .populate('examId', 'title description durationMinutes bookletCode totalMarks instructions')
+      .populate('examId', 'title description durationMinutes bookletCode totalMarks instructions createdBy')
       .populate('studentId', 'name email');
 
     if (!result) {
       return res.status(404).json({ success: false, message: 'Result not found.' });
     }
 
-    // Access control: Student can view own result, Admin can view any
-    if (req.user.role !== 'admin' && result.studentId._id.toString() !== req.user._id.toString()) {
+    const isOwner = result.studentId._id.toString() === req.user._id.toString();
+    const isTeacherOwner = req.user.role === 'teacher' && result.examId.createdBy && result.examId.createdBy.toString() === req.user._id.toString();
+    const isAdmin = req.user.role === 'admin';
+
+    // Access control check
+    if (!isAdmin && !isTeacherOwner && !isOwner) {
       return res.status(403).json({ success: false, message: 'Unauthorized access to test result.' });
     }
 
     const questions = await Question.find({ examId: result.examId._id }).sort({ questionNumber: 1 });
+
+    // Task 3: Only reveal correctOption and solution if attempt is submitted/auto_submitted AND (user is teacher/admin OR is student owner)
+    const isSubmitted = result.status === 'submitted' || result.status === 'auto_submitted';
+    const canViewAnswers = isSubmitted && (isAdmin || isTeacherOwner || (req.user.role === 'student' && isOwner));
 
     const breakdown = questions.map((q) => {
       const studentAns = result.answers.find(
         (a) => a.questionId.toString() === q._id.toString()
       );
 
-      return {
+      const baseObj = {
         questionId: q._id,
         questionNumber: q.questionNumber,
         subject: q.subject,
         questionText: q.questionText,
         options: q.options,
-        correctOption: q.correctOption,
         marksForCorrect: q.marksForCorrect,
         negativeMarksForIncorrect: q.negativeMarksForIncorrect,
-        solution: q.solution,
         studentSelectedOption: studentAns ? studentAns.selectedOption : null,
-        isCorrect: studentAns ? studentAns.isCorrect : false,
-        marksEarned: studentAns ? studentAns.marksEarned : 0,
         isMarkedForReview: studentAns ? studentAns.isMarkedForReview : false,
         timeSpentSeconds: studentAns ? studentAns.timeSpentSeconds : 0,
       };
+
+      if (canViewAnswers) {
+        baseObj.correctOption = q.correctOption;
+        baseObj.solution = q.solution;
+        baseObj.isCorrect = studentAns ? studentAns.isCorrect : false;
+        baseObj.marksEarned = studentAns ? studentAns.marksEarned : 0;
+      }
+
+      return baseObj;
     });
 
     res.json({
       success: true,
-      result,
+      result: {
+        ...result.toObject(),
+        // Omit total score & breakdown details if still in_progress for a student
+        score: canViewAnswers ? result.score : undefined,
+        percentage: canViewAnswers ? result.percentage : undefined,
+      },
       breakdown,
     });
   } catch (err) {

@@ -2,22 +2,31 @@ const express = require('express');
 const Exam = require('../models/Exam');
 const Question = require('../models/Question');
 const Result = require('../models/Result');
-const { verifyToken, verifyAdmin } = require('../middleware/auth');
+const { verifyToken, verifyTeacherOrAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Helper to check exam ownership for teachers
+const checkExamOwnership = (exam, user) => {
+  if (user.role === 'teacher' && exam.createdBy && exam.createdBy.toString() !== user._id.toString()) {
+    return false;
+  }
+  return true;
+};
+
 // @route   GET /api/exams
-// @desc    Get exams (Filtered for students, all for admin)
+// @desc    Get exams (Filtered for students, created-by for teacher, all for admin)
 router.get('/', verifyToken, async (req, res) => {
   try {
     let exams;
     if (req.user.role === 'admin') {
       exams = await Exam.find().sort({ createdAt: -1 });
+    } else if (req.user.role === 'teacher') {
+      exams = await Exam.find({ createdBy: req.user._id }).sort({ createdAt: -1 });
     } else {
       exams = await Exam.find({ isPublished: true }).sort({ createdAt: -1 });
     }
 
-    // Attach total question count & student attempt status
     const examDataList = await Promise.all(
       exams.map(async (exam) => {
         const questionCount = await Question.countDocuments({ examId: exam._id });
@@ -63,6 +72,16 @@ router.get('/:id', verifyToken, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Exam not found.' });
     }
 
+    // Task 6: Return 404 if unpublished and requested by a student
+    if (!exam.isPublished && req.user.role === 'student') {
+      return res.status(404).json({ success: false, message: 'Exam not found.' });
+    }
+
+    // Teacher ownership check for viewing draft details
+    if (req.user.role === 'teacher' && !checkExamOwnership(exam, req.user)) {
+      return res.status(403).json({ success: false, message: 'Forbidden. You can only view exams created by you.' });
+    }
+
     const questionCount = await Question.countDocuments({ examId: exam._id });
     const userAttempt = await Result.findOne({
       examId: exam._id,
@@ -91,8 +110,8 @@ router.get('/:id', verifyToken, async (req, res) => {
 });
 
 // @route   POST /api/exams
-// @desc    Create new exam (Admin only)
-router.post('/', verifyToken, verifyAdmin, async (req, res) => {
+// @desc    Create new exam (Teacher or Admin)
+router.post('/', verifyToken, verifyTeacherOrAdmin, async (req, res) => {
   try {
     const {
       title,
@@ -134,12 +153,16 @@ router.post('/', verifyToken, verifyAdmin, async (req, res) => {
 });
 
 // @route   PUT /api/exams/:id
-// @desc    Update exam details (Admin only)
-router.put('/:id', verifyToken, verifyAdmin, async (req, res) => {
+// @desc    Update exam details (Teacher or Admin)
+router.put('/:id', verifyToken, verifyTeacherOrAdmin, async (req, res) => {
   try {
     const exam = await Exam.findById(req.params.id);
     if (!exam) {
       return res.status(404).json({ success: false, message: 'Exam not found.' });
+    }
+
+    if (!checkExamOwnership(exam, req.user)) {
+      return res.status(403).json({ success: false, message: 'Forbidden. You can only edit exams created by you.' });
     }
 
     Object.assign(exam, req.body);
@@ -152,12 +175,16 @@ router.put('/:id', verifyToken, verifyAdmin, async (req, res) => {
 });
 
 // @route   PATCH /api/exams/:id/toggle-publish
-// @desc    Toggle exam publish status (Admin only)
-router.patch('/:id/toggle-publish', verifyToken, verifyAdmin, async (req, res) => {
+// @desc    Toggle exam publish status (Teacher or Admin)
+router.patch('/:id/toggle-publish', verifyToken, verifyTeacherOrAdmin, async (req, res) => {
   try {
     const exam = await Exam.findById(req.params.id);
     if (!exam) {
       return res.status(404).json({ success: false, message: 'Exam not found.' });
+    }
+
+    if (!checkExamOwnership(exam, req.user)) {
+      return res.status(403).json({ success: false, message: 'Forbidden. You can only publish/unpublish exams created by you.' });
     }
 
     exam.isPublished = !exam.isPublished;
@@ -174,12 +201,16 @@ router.patch('/:id/toggle-publish', verifyToken, verifyAdmin, async (req, res) =
 });
 
 // @route   DELETE /api/exams/:id
-// @desc    Delete exam and associated questions and results (Admin only)
-router.delete('/:id', verifyToken, verifyAdmin, async (req, res) => {
+// @desc    Delete exam and associated questions and results (Teacher or Admin)
+router.delete('/:id', verifyToken, verifyTeacherOrAdmin, async (req, res) => {
   try {
     const exam = await Exam.findById(req.params.id);
     if (!exam) {
       return res.status(404).json({ success: false, message: 'Exam not found.' });
+    }
+
+    if (!checkExamOwnership(exam, req.user)) {
+      return res.status(403).json({ success: false, message: 'Forbidden. You can only delete exams created by you.' });
     }
 
     await Question.deleteMany({ examId: exam._id });
