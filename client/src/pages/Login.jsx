@@ -6,7 +6,6 @@ import { GraduationCap, Lock, Mail, ArrowRight, Shield, AlertCircle, UserCheck, 
 
 const Login = () => {
   const [role, setRole] = useState('student'); // 'student', 'teacher', 'admin'
-  const [loginMethod, setLoginMethod] = useState('password'); // 'password' or 'otp'
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [otpCode, setOtpCode] = useState('');
@@ -15,6 +14,7 @@ const Login = () => {
   const [error, setError] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [showOtpInput, setShowOtpInput] = useState(false);
 
   const { loginPassword, loginGoogle, sendOtp, verifyOtp } = useAuth();
   const navigate = useNavigate();
@@ -32,6 +32,10 @@ const Login = () => {
 
   const handlePasswordSubmit = async (e) => {
     e.preventDefault();
+    if (!identifier || !password) {
+      setError('Please enter your Email/Mobile Number and Password.');
+      return;
+    }
     setError('');
     setInfoMessage('');
     setSubmitting(true);
@@ -46,8 +50,8 @@ const Login = () => {
       }
     } catch (err) {
       if (err.response?.data?.requiresOtp) {
-        setInfoMessage('Account unverified. An OTP code is required.');
-        setLoginMethod('otp');
+        setInfoMessage('Account is unverified. An OTP code has been generated for verification.');
+        setShowOtpInput(true);
         handleSendOtp();
       } else {
         setError(err.response?.data?.message || 'Login failed. Please check credentials.');
@@ -80,7 +84,7 @@ const Login = () => {
 
   const handleSendOtp = async () => {
     if (!identifier) {
-      setError('Please enter your Mobile Number or Email Address to send OTP.');
+      setError('Please enter your Mobile Number or Email Address first.');
       return;
     }
     setError('');
@@ -90,6 +94,7 @@ const Login = () => {
       const res = await sendOtp(identifier);
       if (res.success) {
         setOtpSent(true);
+        setShowOtpInput(true);
         setCooldownSeconds(30);
         setInfoMessage(res.message);
       }
@@ -101,9 +106,9 @@ const Login = () => {
   };
 
   const handleVerifyOtp = async (e) => {
-    e.preventDefault();
+    e?.preventDefault();
     if (!otpCode || otpCode.length !== 6) {
-      setError('Please enter the valid 6-digit OTP code.');
+      setError('Please enter the 6-digit OTP code.');
       return;
     }
     setError('');
@@ -146,7 +151,7 @@ const Login = () => {
           {/* Role Selector Tabs (Student vs Teacher vs Super Admin) */}
           <div>
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 text-center">
-              Select Portal:
+              Select Portal Role:
             </label>
             <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1.5 rounded-xl border border-slate-800 text-[11px]">
               <button
@@ -199,36 +204,6 @@ const Login = () => {
             </div>
           </div>
 
-          {/* Authentication Method Switcher (Password vs Real-Time OTP) */}
-          <div className="flex items-center justify-center gap-4 text-xs border-b border-slate-800 pb-3">
-            <button
-              type="button"
-              onClick={() => {
-                setLoginMethod('password');
-                setOtpSent(false);
-                setError('');
-              }}
-              className={`font-semibold transition-colors pb-1 ${
-                loginMethod === 'password' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Password Login
-            </button>
-            <span className="text-slate-700">|</span>
-            <button
-              type="button"
-              onClick={() => {
-                setLoginMethod('otp');
-                setError('');
-              }}
-              className={`font-semibold transition-colors pb-1 ${
-                loginMethod === 'otp' ? 'text-amber-400 border-b-2 border-amber-400' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Real-Time OTP Login
-            </button>
-          </div>
-
           {error && (
             <div className="bg-rose-500/10 border border-rose-500/30 p-3 rounded-xl text-rose-300 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
@@ -243,51 +218,90 @@ const Login = () => {
             </div>
           )}
 
-          {/* PASSWORD LOGIN FORM */}
-          {loginMethod === 'password' && (
-            <form className="space-y-4" onSubmit={handlePasswordSubmit}>
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Email Address or Mobile Number
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    <Mail className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    placeholder="user@school.com or 9876543210"
-                  />
+          {/* UNIFIED SINGLE PAGE AUTHENTICATION FORM */}
+          <form className="space-y-4" onSubmit={handlePasswordSubmit}>
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                Email Address or Mobile Number
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <Mail className="w-4 h-4" />
                 </div>
+                <input
+                  type="text"
+                  required
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  className="block w-full pl-10 pr-3 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  placeholder="user@school.com or 9876543210"
+                />
               </div>
+            </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Password
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    <Lock className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    placeholder="••••••••"
-                  />
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                Password
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <Lock className="w-4 h-4" />
                 </div>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="block w-full pl-10 pr-3 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  placeholder="••••••••"
+                />
               </div>
+            </div>
 
+            {/* OTP Verification Box (expands when requested or toggled) */}
+            {showOtpInput && (
+              <div className="pt-2 space-y-3 bg-slate-950/80 p-4 rounded-xl border border-amber-500/30">
+                <label className="block text-xs font-semibold text-amber-400 uppercase tracking-wider text-center">
+                  Enter 6-Digit Verification OTP Code
+                </label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value)}
+                  className="block w-full text-center text-2xl font-mono tracking-widest py-2.5 bg-slate-900 border border-amber-500/50 rounded-xl text-amber-300 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  placeholder="123456"
+                />
+
+                <div className="flex items-center justify-between text-xs text-slate-400">
+                  <span>Didn't receive code?</span>
+                  <button
+                    type="button"
+                    onClick={handleSendOtp}
+                    disabled={cooldownSeconds > 0 || submitting}
+                    className="text-amber-400 font-semibold flex items-center gap-1 hover:underline disabled:opacity-50"
+                  >
+                    <RotateCw className="w-3.5 h-3.5" />
+                    {cooldownSeconds > 0 ? `Resend in ${cooldownSeconds}s` : 'Resend OTP'}
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleVerifyOtp}
+                  disabled={submitting || !otpCode}
+                  className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 text-xs disabled:opacity-50"
+                >
+                  {submitting ? 'Verifying...' : 'Verify OTP & Log In'}
+                </button>
+              </div>
+            )}
+
+            {/* Action Buttons Grid */}
+            <div className="grid grid-cols-2 gap-2 pt-2">
               <button
                 type="submit"
                 disabled={submitting}
-                className={`w-full py-3 px-4 text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all text-sm disabled:opacity-50 ${
+                className={`py-3 px-3 text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition-all text-xs disabled:opacity-50 ${
                   role === 'admin'
                     ? 'bg-purple-600 hover:bg-purple-500 shadow-purple-600/20'
                     : role === 'teacher'
@@ -295,87 +309,21 @@ const Login = () => {
                     : 'bg-blue-600 hover:bg-blue-500 shadow-blue-500/20'
                 }`}
               >
-                {submitting ? 'Authenticating...' : `Sign In as ${role === 'admin' ? 'Admin' : role === 'teacher' ? 'Teacher' : 'Student'}`}
-                <ArrowRight className="w-4 h-4" />
+                Password Login <ArrowRight className="w-3.5 h-3.5" />
               </button>
-            </form>
-          )}
 
-          {/* OTP LOGIN FORM */}
-          {loginMethod === 'otp' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Mobile Number or Email Address
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    <Smartphone className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    disabled={otpSent}
-                    className="block w-full pl-10 pr-3 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm disabled:opacity-60"
-                    placeholder="9876543210 or user@school.com"
-                  />
-                </div>
-              </div>
-
-              {!otpSent ? (
-                <button
-                  type="button"
-                  onClick={handleSendOtp}
-                  disabled={submitting || !identifier}
-                  className="w-full py-3 px-4 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold rounded-xl shadow-lg shadow-amber-600/20 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
-                >
-                  {submitting ? 'Sending OTP Code...' : 'Send 6-Digit OTP Code'}
-                </button>
-              ) : (
-                <form className="space-y-4" onSubmit={handleVerifyOtp}>
-                  <div>
-                    <label className="block text-xs font-semibold text-amber-400 uppercase tracking-wider mb-1.5">
-                      Enter 6-Digit Verification OTP Code
-                    </label>
-                    <input
-                      type="text"
-                      maxLength={6}
-                      required
-                      value={otpCode}
-                      onChange={(e) => setOtpCode(e.target.value)}
-                      className="block w-full text-center text-2xl font-mono tracking-widest py-3 bg-slate-950 border border-amber-500/50 rounded-xl text-amber-300 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      placeholder="123456"
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span>Didn't receive code?</span>
-                    <button
-                      type="button"
-                      onClick={handleSendOtp}
-                      disabled={cooldownSeconds > 0 || submitting}
-                      className="text-amber-400 font-semibold flex items-center gap-1 hover:underline disabled:opacity-50"
-                    >
-                      <RotateCw className="w-3.5 h-3.5" />
-                      {cooldownSeconds > 0 ? `Resend in ${cooldownSeconds}s` : 'Resend OTP'}
-                    </button>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
-                  >
-                    {submitting ? 'Verifying...' : 'Verify OTP & Sign In'}
-                  </button>
-                </form>
-              )}
+              <button
+                type="button"
+                onClick={handleSendOtp}
+                disabled={submitting || !identifier}
+                className="py-3 px-3 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold border border-slate-700 rounded-xl shadow-lg flex items-center justify-center gap-1.5 text-xs transition-all disabled:opacity-50"
+              >
+                <Smartphone className="w-3.5 h-3.5 text-amber-400" /> Real-Time OTP
+              </button>
             </div>
-          )}
+          </form>
 
-          {/* GOOGLE SIGN-IN BUTTON (MOVED BELOW SIGN IN BUTTON) */}
+          {/* GOOGLE SIGN-IN BUTTON */}
           <div className="pt-2 space-y-3 border-t border-slate-800/80">
             <div className="relative flex py-1 items-center">
               <div className="flex-grow border-t border-slate-800"></div>
