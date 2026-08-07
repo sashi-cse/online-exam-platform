@@ -1,6 +1,7 @@
 const express = require('express');
 const User = require('../models/User');
 const Exam = require('../models/Exam');
+const Question = require('../models/Question');
 const Result = require('../models/Result');
 const { verifyToken, verifyAdmin } = require('../middleware/auth');
 
@@ -38,7 +39,7 @@ router.get('/stats', async (req, res) => {
 });
 
 // @route   GET /api/admin/teachers
-// @desc    Get list of all teachers with search and filter
+// @desc    Get list of all teachers with created exam counts
 router.get('/teachers', async (req, res) => {
   try {
     const { search, status } = req.query;
@@ -50,6 +51,7 @@ router.get('/teachers', async (req, res) => {
         { name: searchRegex },
         { email: searchRegex },
         { phone: searchRegex },
+        { mobileNumber: searchRegex },
         { department: searchRegex },
       ];
     }
@@ -59,14 +61,40 @@ router.get('/teachers', async (req, res) => {
 
     const teachers = await User.find(query).select('-password').sort({ createdAt: -1 });
 
-    res.json({ success: true, count: teachers.length, teachers });
+    const teachersWithDetails = await Promise.all(
+      teachers.map(async (teacher) => {
+        const examCount = await Exam.countDocuments({ createdBy: teacher._id });
+        return {
+          ...teacher.toObject(),
+          examCount,
+        };
+      })
+    );
+
+    res.json({ success: true, count: teachersWithDetails.length, teachers: teachersWithDetails });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// @route   GET /api/admin/teachers/:id
+// @desc    Get teacher profile detail & created exams
+router.get('/teachers/:id', async (req, res) => {
+  try {
+    const teacher = await User.findOne({ _id: req.params.id, role: 'teacher' }).select('-password');
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: 'Teacher profile not found.' });
+    }
+
+    const exams = await Exam.find({ createdBy: teacher._id }).sort({ createdAt: -1 });
+    res.json({ success: true, teacher, exams });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
 // @route   GET /api/admin/students
-// @desc    Get list of all students with search and filter
+// @desc    Get list of all students with attempted exam stats
 router.get('/students', async (req, res) => {
   try {
     const { search, status } = req.query;
@@ -78,6 +106,7 @@ router.get('/students', async (req, res) => {
         { name: searchRegex },
         { email: searchRegex },
         { phone: searchRegex },
+        { mobileNumber: searchRegex },
         { rollNumber: searchRegex },
       ];
     }
@@ -87,7 +116,82 @@ router.get('/students', async (req, res) => {
 
     const students = await User.find(query).select('-password').sort({ createdAt: -1 });
 
-    res.json({ success: true, count: students.length, students });
+    const studentsWithDetails = await Promise.all(
+      students.map(async (student) => {
+        const results = await Result.find({
+          studentId: student._id,
+          status: { $in: ['submitted', 'auto_submitted'] },
+        });
+
+        const attemptsCount = results.length;
+        const avgScore = attemptsCount > 0
+          ? (results.reduce((sum, r) => sum + r.score, 0) / attemptsCount).toFixed(2)
+          : 0;
+
+        return {
+          ...student.toObject(),
+          attemptsCount,
+          avgScore: Number(avgScore),
+        };
+      })
+    );
+
+    res.json({ success: true, count: studentsWithDetails.length, students: studentsWithDetails });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// @route   GET /api/admin/students/:id
+// @desc    Get student profile detail & past results
+router.get('/students/:id', async (req, res) => {
+  try {
+    const student = await User.findOne({ _id: req.params.id, role: 'student' }).select('-password');
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student profile not found.' });
+    }
+
+    const results = await Result.find({ studentId: student._id })
+      .populate('examId', 'title subject bookletCode totalMarks')
+      .sort({ createdAt: -1 });
+
+    res.json({ success: true, student, results });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// @route   GET /api/admin/exams
+// @desc    Get all exams with teacher owner details and average score stats
+router.get('/exams', async (req, res) => {
+  try {
+    const exams = await Exam.find()
+      .populate('createdBy', 'name email phone department')
+      .sort({ createdAt: -1 });
+
+    const examStatsList = await Promise.all(
+      exams.map(async (exam) => {
+        const questionCount = await Question.countDocuments({ examId: exam._id });
+        const results = await Result.find({
+          examId: exam._id,
+          status: { $in: ['submitted', 'auto_submitted'] },
+        });
+
+        const totalAttempts = results.length;
+        const avgScore = totalAttempts > 0
+          ? (results.reduce((sum, r) => sum + r.score, 0) / totalAttempts).toFixed(2)
+          : 0;
+
+        return {
+          ...exam.toObject(),
+          questionCount,
+          totalAttempts,
+          avgScore: Number(avgScore),
+        };
+      })
+    );
+
+    res.json({ success: true, count: examStatsList.length, exams: examStatsList });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

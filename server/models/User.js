@@ -12,13 +12,19 @@ const UserSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
       sparse: true,
-      unique: true, // Ensures strict uniqueness in MongoDB database
+      unique: true,
     },
     phone: {
       type: String,
       trim: true,
       sparse: true,
-      unique: true, // Ensures strict uniqueness in MongoDB database
+      unique: true,
+    },
+    mobileNumber: {
+      type: String,
+      trim: true,
+      sparse: true,
+      unique: true,
     },
     password: {
       type: String,
@@ -49,7 +55,12 @@ const UserSchema = new mongoose.Schema(
       default: '',
     },
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
+
+// Virtual for passwordHash compatibility
+UserSchema.virtual('passwordHash').get(function () {
+  return this.password;
+});
 
 module.exports = mongoose.model('User', UserSchema);
