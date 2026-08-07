@@ -10,9 +10,6 @@ const { generateOtpCode, sendOtpNotification, normalizePhoneNumber } = require('
 
 const router = express.Router();
 
-// Google OAuth Client
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
-
 // Rate limiter: Max 10 OTP requests per 15 minutes per IP
 const otpRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -61,6 +58,15 @@ const sendAuthResponse = (res, user, message = 'Authentication successful!') => 
   });
 };
 
+// @route   GET /api/auth/config
+// @desc    Get public auth config (Google Client ID)
+router.get('/config', (req, res) => {
+  res.json({
+    success: true,
+    googleClientId: process.env.GOOGLE_CLIENT_ID || '',
+  });
+});
+
 // @route   POST /api/auth/google
 // @desc    Authenticate or Register via Google OAuth 2.0
 router.post('/google', async (req, res) => {
@@ -71,39 +77,32 @@ router.post('/google', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Google credential token is required.' });
     }
 
+    const googleClientId = process.env.GOOGLE_CLIENT_ID;
+    if (!googleClientId) {
+      return res.status(500).json({ success: false, message: 'GOOGLE_CLIENT_ID is not configured in server environment.' });
+    }
+
+    const googleClient = new OAuth2Client(googleClientId);
+
     let email = null;
     let name = null;
     let googleId = null;
 
-    // Verify token using google-auth-library or fallback decode
     try {
-      if (process.env.GOOGLE_CLIENT_ID) {
-        const ticket = await googleClient.verifyIdToken({
-          idToken: credential,
-          audience: process.env.GOOGLE_CLIENT_ID,
-        });
-        const payload = ticket.getPayload();
-        email = payload.email ? payload.email.toLowerCase().trim() : null;
-        name = payload.name;
-        googleId = payload.sub;
-      } else {
-        // Fallback for dev mode when GOOGLE_CLIENT_ID is not configured
-        const decoded = jwt.decode(credential);
-        if (decoded && decoded.email) {
-          email = decoded.email.toLowerCase().trim();
-          name = decoded.name || email.split('@')[0];
-          googleId = decoded.sub || decoded.id;
-        }
-      }
+      const ticket = await googleClient.verifyIdToken({
+        idToken: credential,
+        audience: googleClientId,
+      });
+      const payload = ticket.getPayload();
+      email = payload.email ? payload.email.toLowerCase().trim() : null;
+      name = payload.name;
+      googleId = payload.sub;
     } catch (verErr) {
-      const decoded = jwt.decode(credential);
-      if (decoded && decoded.email) {
-        email = decoded.email.toLowerCase().trim();
-        name = decoded.name || email.split('@')[0];
-        googleId = decoded.sub;
-      } else {
-        return res.status(400).json({ success: false, message: 'Invalid or expired Google OAuth credential.' });
-      }
+      console.error('❌ Google Token Verification Error:', verErr.message);
+      return res.status(401).json({
+        success: false,
+        message: `Google OAuth verification failed: ${verErr.message}`,
+      });
     }
 
     if (!email) {
@@ -156,7 +155,7 @@ router.post('/google', async (req, res) => {
       authProvider: 'google',
       googleId,
       role: assignedRole,
-      isVerified: true, // Google pre-verifies emails
+      isVerified: true,
       isActive: true,
     });
 
@@ -167,7 +166,7 @@ router.post('/google', async (req, res) => {
 });
 
 // @route   POST /api/auth/send-otp
-// @desc    Generate and send 6-digit OTP to Mobile or Email
+// @desc    Generate and send 6-digit OTP to Mobile or Email via real transactional provider
 router.post('/send-otp', otpRateLimiter, async (req, res) => {
   try {
     const { identifier } = req.body;
@@ -192,20 +191,19 @@ router.post('/send-otp', otpRateLimiter, async (req, res) => {
       attempts: 0,
     });
 
-    const dispatchResult = await sendOtpNotification(cleanIdentifier, rawOtp, isEmail);
-
-    let clientMessage = `A 6-digit OTP code has been sent to ${cleanIdentifier}.`;
-    if (dispatchResult && dispatchResult.mode === 'demo') {
-      clientMessage = `A 6-digit OTP code has been generated. [Demo Verification Code: ${dispatchResult.rawOtp}]`;
-    }
+    // Real delivery call — throws error if configuration or provider fails
+    await sendOtpNotification(cleanIdentifier, rawOtp, isEmail);
 
     res.json({
       success: true,
-      message: clientMessage,
+      message: `A 6-digit OTP code has been sent to ${cleanIdentifier}.`,
       expiresInSeconds: 600,
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(400).json({
+      success: false,
+      message: err.message || 'Failed to send OTP code. Please verify identifier or provider credentials.',
+    });
   }
 });
 
@@ -359,17 +357,12 @@ router.post('/register', async (req, res) => {
       attempts: 0,
     });
 
-    const dispatchResult = await sendOtpNotification(identifier, rawOtp, Boolean(cleanEmail));
-
-    let msg = `${userRole === 'teacher' ? 'Teacher' : 'Student'} account created! An OTP code was sent to ${identifier}.`;
-    if (dispatchResult && dispatchResult.mode === 'demo') {
-      msg = `Account created! [Demo Verification OTP Code: ${dispatchResult.rawOtp}]`;
-    }
+    await sendOtpNotification(identifier, rawOtp, Boolean(cleanEmail));
 
     res.status(201).json({
       success: true,
       requiresOtp: true,
-      message: msg,
+      message: `${userRole === 'teacher' ? 'Teacher' : 'Student'} account created! An OTP code was sent to ${identifier}.`,
       identifier,
     });
   } catch (err) {
@@ -379,7 +372,7 @@ router.post('/register', async (req, res) => {
         message: 'An account with this Email Address or Mobile Number already exists.',
       });
     }
-    res.status(500).json({ success: false, message: err.message });
+    res.status(400).json({ success: false, message: err.message || 'Registration failed.' });
   }
 });
 
