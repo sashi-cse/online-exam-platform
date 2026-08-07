@@ -152,17 +152,17 @@ const Register = () => {
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md z-10">
-        <div className="bg-slate-900/80 backdrop-blur-xl py-8 px-6 shadow-2xl border border-slate-800 rounded-2xl sm:px-10">
+        <div className="bg-slate-900/80 backdrop-blur-xl py-8 px-6 shadow-2xl border border-slate-800 rounded-2xl sm:px-10 space-y-6">
           
           {error && (
-            <div className="mb-4 bg-rose-500/10 border border-rose-500/30 p-3 rounded-xl text-rose-300 text-xs flex items-center gap-2">
+            <div className="bg-rose-500/10 border border-rose-500/30 p-3 rounded-xl text-rose-300 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
               <span>{error}</span>
             </div>
           )}
 
           {infoMessage && (
-            <div className="mb-4 bg-emerald-500/10 border border-emerald-500/30 p-3 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
+            <div className="bg-emerald-500/10 border border-emerald-500/30 p-3 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
               <span>{infoMessage}</span>
             </div>
@@ -171,27 +171,6 @@ const Register = () => {
           {/* STEP 1: Registration Details */}
           {step === 1 && (
             <div className="space-y-5">
-              
-              {/* GOOGLE SIGN-UP BUTTON */}
-              <div className="space-y-2">
-                <div className="flex justify-center">
-                  <GoogleLogin
-                    onSuccess={handleGoogleSuccess}
-                    onError={() => setError('Google Sign-Up process failed. Please try again.')}
-                    theme="filled_dark"
-                    shape="pill"
-                    size="large"
-                    text="signup_with"
-                    width="340"
-                  />
-                </div>
-                <div className="relative flex py-2 items-center">
-                  <div className="flex-grow border-t border-slate-800"></div>
-                  <span className="flex-shrink mx-4 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">or register with email/mobile</span>
-                  <div className="flex-grow border-t border-slate-800"></div>
-                </div>
-              </div>
-
               <form className="space-y-5" onSubmit={handleRegisterSubmit}>
                 {/* Account Role Selector */}
                 <div>
@@ -353,6 +332,26 @@ const Register = () => {
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </form>
+
+              {/* GOOGLE SIGN-UP BUTTON (BELOW REGISTER BUTTON) */}
+              <div className="pt-2 space-y-3 border-t border-slate-800/80">
+                <div className="relative flex py-1 items-center">
+                  <div className="flex-grow border-t border-slate-800"></div>
+                  <span className="flex-shrink mx-3 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">or register with</span>
+                  <div className="flex-grow border-t border-slate-800"></div>
+                </div>
+                <div className="flex justify-center">
+                  <GoogleLogin
+                    onSuccess={handleGoogleSuccess}
+                    onError={() => setError('Google Sign-Up process failed. Please try again.')}
+                    theme="filled_dark"
+                    shape="pill"
+                    size="large"
+                    text="signup_with"
+                    width="340"
+                  />
+                </div>
+              </div>
             </div>
           )}
 

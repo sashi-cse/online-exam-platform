@@ -199,26 +199,6 @@ const Login = () => {
             </div>
           </div>
 
-          {/* GOOGLE SIGN-IN BUTTON */}
-          <div className="space-y-2">
-            <div className="flex justify-center">
-              <GoogleLogin
-                onSuccess={handleGoogleSuccess}
-                onError={() => setError('Google Sign-In process failed. Please try again.')}
-                theme="filled_dark"
-                shape="pill"
-                size="large"
-                text="continue_with"
-                width="340"
-              />
-            </div>
-            <div className="relative flex py-2 items-center">
-              <div className="flex-grow border-t border-slate-800"></div>
-              <span className="flex-shrink mx-4 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">or sign in with</span>
-              <div className="flex-grow border-t border-slate-800"></div>
-            </div>
-          </div>
-
           {/* Authentication Method Switcher (Password vs Real-Time OTP) */}
           <div className="flex items-center justify-center gap-4 text-xs border-b border-slate-800 pb-3">
             <button
@@ -394,6 +374,26 @@ const Login = () => {
               )}
             </div>
           )}
+
+          {/* GOOGLE SIGN-IN BUTTON (MOVED BELOW SIGN IN BUTTON) */}
+          <div className="pt-2 space-y-3 border-t border-slate-800/80">
+            <div className="relative flex py-1 items-center">
+              <div className="flex-grow border-t border-slate-800"></div>
+              <span className="flex-shrink mx-3 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">or sign in with</span>
+              <div className="flex-grow border-t border-slate-800"></div>
+            </div>
+            <div className="flex justify-center">
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={() => setError('Google Sign-In process failed. Please try again.')}
+                theme="filled_dark"
+                shape="pill"
+                size="large"
+                text="continue_with"
+                width="340"
+              />
+            </div>
+          </div>
 
           {/* Registration Link */}
           {role !== 'admin' && (
