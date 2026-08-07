@@ -12,7 +12,7 @@ const router = express.Router();
 // Rate limiter: Max 5 OTP requests per 15 minutes per IP
 const otpRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: 10,
   message: { success: false, message: 'Too many OTP requests. Please try again after 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -34,13 +34,13 @@ const sendAuthResponse = (res, user, message = 'Authentication successful!') => 
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 
   return res.json({
     success: true,
     message,
-    token, // Also return in body for client flexibility
+    token,
     user: {
       id: user._id,
       name: user.name,
@@ -81,11 +81,16 @@ router.post('/send-otp', otpRateLimiter, async (req, res) => {
       attempts: 0,
     });
 
-    await sendOtpNotification(cleanIdentifier, rawOtp, isEmail);
+    const dispatchResult = await sendOtpNotification(cleanIdentifier, rawOtp, isEmail);
+
+    let clientMessage = `A 6-digit OTP code has been sent to ${cleanIdentifier}.`;
+    if (dispatchResult && dispatchResult.mode === 'demo') {
+      clientMessage = `A 6-digit OTP code has been generated. [Demo Verification Code: ${dispatchResult.rawOtp}]`;
+    }
 
     res.json({
       success: true,
-      message: `A 6-digit OTP code has been sent to ${cleanIdentifier}.`,
+      message: clientMessage,
       expiresInSeconds: 600,
     });
   } catch (err) {
@@ -110,13 +115,11 @@ router.post('/verify-otp', async (req, res) => {
       return res.status(400).json({ success: false, message: 'OTP expired or not found. Please request a new OTP.' });
     }
 
-    // Explicit Expiry Check (Task 6)
     if (otpRecord.expiresAt < new Date()) {
       await Otp.deleteOne({ _id: otpRecord._id });
       return res.status(400).json({ success: false, message: 'OTP code has expired. Please request a new OTP.' });
     }
 
-    // Lockout check: max 5 failed attempts
     if (otpRecord.attempts >= 5) {
       await Otp.deleteOne({ _id: otpRecord._id });
       return res.status(429).json({ success: false, message: 'Maximum OTP verification attempts exceeded. Request a new OTP.' });
@@ -132,11 +135,14 @@ router.post('/verify-otp', async (req, res) => {
     await Otp.deleteOne({ _id: otpRecord._id });
 
     let user = await User.findOne({
-      $or: [{ email: cleanIdentifier }, { phone: identifier.trim() }],
+      $or: [
+        { email: cleanIdentifier },
+        { phone: identifier.trim() },
+        { mobileNumber: identifier.trim() },
+      ],
     });
 
     if (user) {
-      // Deactivated Account Check (Task 7)
       if (!user.isActive) {
         return res.status(403).json({
           success: false,
@@ -144,7 +150,6 @@ router.post('/verify-otp', async (req, res) => {
         });
       }
 
-      // Role check
       if (role && user.role !== role) {
         const userRoleLabel = user.role === 'admin' ? 'Super Admin' : user.role === 'teacher' ? 'Teacher' : 'Student';
         return res.status(400).json({
@@ -171,22 +176,26 @@ router.post('/verify-otp', async (req, res) => {
 // @desc    Register a new student or teacher account
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, phone, password, role, rollNumber, department } = req.body;
+    const { name, email, phone, mobileNumber, password, role, rollNumber, department } = req.body;
 
     if (!name || !password) {
       return res.status(400).json({ success: false, message: 'Name and password are required.' });
     }
 
-    if (!email && !phone) {
+    const inputPhone = phone || mobileNumber;
+    if (!email && !inputPhone) {
       return res.status(400).json({ success: false, message: 'Either Email Address or Mobile Number is required.' });
     }
 
     const cleanEmail = email ? email.trim().toLowerCase() : null;
-    const cleanPhone = phone ? phone.trim() : null;
+    const cleanPhone = inputPhone ? inputPhone.trim() : null;
 
     const queryConditions = [];
     if (cleanEmail) queryConditions.push({ email: cleanEmail });
-    if (cleanPhone) queryConditions.push({ phone: cleanPhone });
+    if (cleanPhone) {
+      queryConditions.push({ phone: cleanPhone });
+      queryConditions.push({ mobileNumber: cleanPhone });
+    }
 
     if (queryConditions.length > 0) {
       const existingUser = await User.findOne({ $or: queryConditions });
@@ -194,7 +203,7 @@ router.post('/register', async (req, res) => {
         if (cleanEmail && existingUser.email === cleanEmail) {
           return res.status(400).json({ success: false, message: 'An account with this Email Address already exists.' });
         }
-        if (cleanPhone && existingUser.phone === cleanPhone) {
+        if (cleanPhone && (existingUser.phone === cleanPhone || existingUser.mobileNumber === cleanPhone)) {
           return res.status(400).json({ success: false, message: 'An account with this Mobile Number already exists.' });
         }
       }
@@ -208,6 +217,7 @@ router.post('/register', async (req, res) => {
       name,
       email: cleanEmail,
       phone: cleanPhone,
+      mobileNumber: cleanPhone,
       password: hashedPassword,
       role: userRole,
       isVerified: false,
@@ -229,16 +239,20 @@ router.post('/register', async (req, res) => {
       attempts: 0,
     });
 
-    await sendOtpNotification(identifier, rawOtp, Boolean(cleanEmail));
+    const dispatchResult = await sendOtpNotification(identifier, rawOtp, Boolean(cleanEmail));
+
+    let msg = `${userRole === 'teacher' ? 'Teacher' : 'Student'} account created! An OTP code was sent to ${identifier}.`;
+    if (dispatchResult && dispatchResult.mode === 'demo') {
+      msg = `Account created! [Demo Verification OTP Code: ${dispatchResult.rawOtp}]`;
+    }
 
     res.status(201).json({
       success: true,
       requiresOtp: true,
-      message: `${userRole === 'teacher' ? 'Teacher' : 'Student'} account created! An OTP verification code was sent to ${identifier}.`,
+      message: msg,
       identifier,
     });
   } catch (err) {
-    // Handle MongoDB Duplicate Key Error (Code 11000 - Task 5)
     if (err.code === 11000) {
       return res.status(400).json({
         success: false,
@@ -265,6 +279,7 @@ router.post('/login-password', async (req, res) => {
       $or: [
         { email: cleanIdentifier },
         { phone: identifier.trim() },
+        { mobileNumber: identifier.trim() },
       ],
     });
 
@@ -272,7 +287,6 @@ router.post('/login-password', async (req, res) => {
       return res.status(401).json({ success: false, message: 'Account not found. Please check your credentials or register.' });
     }
 
-    // Deactivated Account Check (Task 7)
     if (!user.isActive) {
       return res.status(403).json({
         success: false,
@@ -280,7 +294,6 @@ router.post('/login-password', async (req, res) => {
       });
     }
 
-    // Role check
     if (role && user.role !== role) {
       const userRoleLabel = user.role === 'admin' ? 'Super Admin' : user.role === 'teacher' ? 'Teacher' : 'Student';
       return res.status(400).json({
@@ -325,6 +338,7 @@ router.get('/me', verifyToken, async (req, res) => {
         name: req.user.name,
         email: req.user.email,
         phone: req.user.phone,
+        mobileNumber: req.user.mobileNumber,
         role: req.user.role,
         rollNumber: req.user.rollNumber,
         department: req.user.department,
