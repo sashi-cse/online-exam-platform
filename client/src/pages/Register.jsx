@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../context/AuthContext';
 import { GraduationCap, User, Lock, Mail, Phone, ArrowRight, AlertCircle, Shield, UserCheck, BookOpen, Building, CheckCircle2, RotateCw } from 'lucide-react';
 
@@ -21,7 +22,7 @@ const Register = () => {
   const [infoMessage, setInfoMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const { register, sendOtp, verifyOtp } = useAuth();
+  const { register, loginGoogle, sendOtp, verifyOtp } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -43,6 +44,25 @@ const Register = () => {
     }
     return () => clearInterval(timer);
   }, [cooldownSeconds]);
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    if (!credentialResponse?.credential) return;
+    setError('');
+    setInfoMessage('');
+    setSubmitting(true);
+    try {
+      const res = await loginGoogle(credentialResponse.credential, role);
+      if (res.user?.role === 'teacher') {
+        navigate('/admin');
+      } else {
+        navigate('/dashboard');
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Google Sign-Up failed.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleRegisterSubmit = async (e) => {
     e.preventDefault();
@@ -150,168 +170,190 @@ const Register = () => {
 
           {/* STEP 1: Registration Details */}
           {step === 1 && (
-            <form className="space-y-5" onSubmit={handleRegisterSubmit}>
+            <div className="space-y-5">
               
-              {/* Account Role Selector */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                  I am registering as:
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setRole('student')}
-                    className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all ${
-                      role === 'student'
-                        ? 'bg-blue-600/20 border-blue-500 text-blue-300 ring-1 ring-blue-500'
-                        : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:bg-slate-800'
-                    }`}
-                  >
-                    <UserCheck className="w-4 h-4" /> Student
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRole('teacher')}
-                    className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all ${
-                      role === 'teacher'
-                        ? 'bg-amber-500/20 border-amber-500 text-amber-300 ring-1 ring-amber-500'
-                        : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:bg-slate-800'
-                    }`}
-                  >
-                    <Shield className="w-4 h-4" /> Teacher
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Full Name
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    <User className="w-5 h-5" />
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    placeholder={role === 'teacher' ? "Prof. Rajesh Kumar" : "Rahul Verma"}
+              {/* GOOGLE SIGN-UP BUTTON */}
+              <div className="space-y-2">
+                <div className="flex justify-center">
+                  <GoogleLogin
+                    onSuccess={handleGoogleSuccess}
+                    onError={() => setError('Google Sign-Up process failed. Please try again.')}
+                    theme="filled_dark"
+                    shape="pill"
+                    size="large"
+                    text="signup_with"
+                    width="340"
                   />
                 </div>
-              </div>
-
-              {/* Mobile Number Field */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Mobile Number
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    <Phone className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    placeholder="9876543210"
-                  />
+                <div className="relative flex py-2 items-center">
+                  <div className="flex-grow border-t border-slate-800"></div>
+                  <span className="flex-shrink mx-4 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">or register with email/mobile</span>
+                  <div className="flex-grow border-t border-slate-800"></div>
                 </div>
               </div>
 
-              {/* Email Address Field */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Email Address (Optional)
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    <Mail className="w-5 h-5" />
+              <form className="space-y-5" onSubmit={handleRegisterSubmit}>
+                {/* Account Role Selector */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                    I am registering as:
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setRole('student')}
+                      className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                        role === 'student'
+                          ? 'bg-blue-600/20 border-blue-500 text-blue-300 ring-1 ring-blue-500'
+                          : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:bg-slate-800'
+                      }`}
+                    >
+                      <UserCheck className="w-4 h-4" /> Student
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRole('teacher')}
+                      className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                        role === 'teacher'
+                          ? 'bg-amber-500/20 border-amber-500 text-amber-300 ring-1 ring-amber-500'
+                          : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:bg-slate-800'
+                      }`}
+                    >
+                      <Shield className="w-4 h-4" /> Teacher
+                    </button>
                   </div>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    placeholder={role === 'teacher' ? "teacher@school.com" : "student@school.com"}
-                  />
                 </div>
-              </div>
 
-              {/* Role specific input */}
-              {role === 'student' ? (
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Roll Number / Student ID (Optional)
+                    Full Name
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                      <BookOpen className="w-4 h-4" />
+                      <User className="w-5 h-5" />
                     </div>
                     <input
                       type="text"
-                      value={rollNumber}
-                      onChange={(e) => setRollNumber(e.target.value)}
+                      required
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
                       className="block w-full pl-10 pr-3 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                      placeholder="NEET-2026-001"
+                      placeholder={role === 'teacher' ? "Prof. Rajesh Kumar" : "Rahul Verma"}
                     />
                   </div>
                 </div>
-              ) : (
+
+                {/* Mobile Number Field */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Department / Subject Area (Optional)
+                    Mobile Number
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                      <Building className="w-4 h-4" />
+                      <Phone className="w-4 h-4" />
                     </div>
                     <input
-                      type="text"
-                      value={department}
-                      onChange={(e) => setDepartment(e.target.value)}
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
                       className="block w-full pl-10 pr-3 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                      placeholder="Physics & Chemistry"
+                      placeholder="9876543210"
                     />
                   </div>
                 </div>
-              )}
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Password
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    <Lock className="w-5 h-5" />
+                {/* Email Address Field */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                    Email Address (Optional)
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                      <Mail className="w-5 h-5" />
+                    </div>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="block w-full pl-10 pr-3 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      placeholder={role === 'teacher' ? "teacher@school.com" : "student@school.com"}
+                    />
                   </div>
-                  <input
-                    type="password"
-                    required
-                    minLength={6}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    placeholder="•••••••• (Min 6 characters)"
-                  />
                 </div>
-              </div>
 
-              <button
-                type="submit"
-                disabled={submitting}
-                className={`w-full py-3 px-4 text-white font-semibold rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all text-sm disabled:opacity-50 ${
-                  role === 'teacher'
-                    ? 'bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 shadow-amber-600/25'
-                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-blue-500/25'
-                }`}
-              >
-                {submitting ? 'Creating Account...' : `Register & Verify OTP (${role === 'teacher' ? 'Teacher' : 'Student'})`}
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </form>
+                {/* Role specific input */}
+                {role === 'student' ? (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                      Roll Number / Student ID (Optional)
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                        <BookOpen className="w-4 h-4" />
+                      </div>
+                      <input
+                        type="text"
+                        value={rollNumber}
+                        onChange={(e) => setRollNumber(e.target.value)}
+                        className="block w-full pl-10 pr-3 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        placeholder="NEET-2026-001"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                      Department / Subject Area (Optional)
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                        <Building className="w-4 h-4" />
+                      </div>
+                      <input
+                        type="text"
+                        value={department}
+                        onChange={(e) => setDepartment(e.target.value)}
+                        className="block w-full pl-10 pr-3 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        placeholder="Physics & Chemistry"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                      <Lock className="w-5 h-5" />
+                    </div>
+                    <input
+                      type="password"
+                      required
+                      minLength={6}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="block w-full pl-10 pr-3 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      placeholder="•••••••• (Min 6 characters)"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className={`w-full py-3 px-4 text-white font-semibold rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all text-sm disabled:opacity-50 ${
+                    role === 'teacher'
+                      ? 'bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 shadow-amber-600/25'
+                      : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-blue-500/25'
+                  }`}
+                >
+                  {submitting ? 'Creating Account...' : `Register & Verify OTP (${role === 'teacher' ? 'Teacher' : 'Student'})`}
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </form>
+            </div>
           )}
 
           {/* STEP 2: OTP Verification */}

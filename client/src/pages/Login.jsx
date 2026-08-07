@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../context/AuthContext';
 import { GraduationCap, Lock, Mail, ArrowRight, Shield, AlertCircle, UserCheck, UserPlus, KeyRound, Smartphone, CheckCircle2, RotateCw } from 'lucide-react';
 
@@ -15,7 +16,7 @@ const Login = () => {
   const [infoMessage, setInfoMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const { loginPassword, sendOtp, verifyOtp } = useAuth();
+  const { loginPassword, loginGoogle, sendOtp, verifyOtp } = useAuth();
   const navigate = useNavigate();
 
   // Cooldown timer loop
@@ -51,6 +52,27 @@ const Login = () => {
       } else {
         setError(err.response?.data?.message || 'Login failed. Please check credentials.');
       }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    if (!credentialResponse?.credential) return;
+    setError('');
+    setInfoMessage('');
+    setSubmitting(true);
+    try {
+      const res = await loginGoogle(credentialResponse.credential, role);
+      if (res.user?.role === 'admin') {
+        navigate('/admin/manage');
+      } else if (res.user?.role === 'teacher') {
+        navigate('/admin');
+      } else {
+        navigate('/dashboard');
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Google Sign-In failed.');
     } finally {
       setSubmitting(false);
     }
@@ -174,6 +196,26 @@ const Login = () => {
               >
                 <KeyRound className="w-3.5 h-3.5" /> Admin
               </button>
+            </div>
+          </div>
+
+          {/* GOOGLE SIGN-IN BUTTON */}
+          <div className="space-y-2">
+            <div className="flex justify-center">
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={() => setError('Google Sign-In process failed. Please try again.')}
+                theme="filled_dark"
+                shape="pill"
+                size="large"
+                text="continue_with"
+                width="340"
+              />
+            </div>
+            <div className="relative flex py-2 items-center">
+              <div className="flex-grow border-t border-slate-800"></div>
+              <span className="flex-shrink mx-4 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">or sign in with</span>
+              <div className="flex-grow border-t border-slate-800"></div>
             </div>
           </div>
 

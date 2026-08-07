@@ -35,6 +35,15 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const loginGoogle = async (credential, role) => {
+    const res = await api.post('/auth/google', { credential, role });
+    if (res.data.success && res.data.user) {
+      if (res.data.token) localStorage.setItem('token', res.data.token);
+      setUser(res.data.user);
+      return res.data;
+    }
+  };
+
   const sendOtp = async (identifier) => {
     const res = await api.post('/auth/send-otp', { identifier });
     return res.data;
@@ -79,6 +88,7 @@ export const AuthProvider = ({ children }) => {
         user,
         loading,
         loginPassword,
+        loginGoogle,
         sendOtp,
         verifyOtp,
         register,

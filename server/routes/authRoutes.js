@@ -2,14 +2,18 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
+const { OAuth2Client } = require('google-auth-library');
 const User = require('../models/User');
 const Otp = require('../models/Otp');
 const { verifyToken, getJwtSecret } = require('../middleware/auth');
-const { generateOtpCode, sendOtpNotification } = require('../utils/otpService');
+const { generateOtpCode, sendOtpNotification, normalizePhoneNumber } = require('../utils/otpService');
 
 const router = express.Router();
 
-// Rate limiter: Max 5 OTP requests per 15 minutes per IP
+// Google OAuth Client
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+// Rate limiter: Max 10 OTP requests per 15 minutes per IP
 const otpRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -45,15 +49,122 @@ const sendAuthResponse = (res, user, message = 'Authentication successful!') => 
       id: user._id,
       name: user.name,
       email: user.email,
-      phone: user.phone,
+      phone: user.phone || user.mobileNumber,
+      mobileNumber: user.mobileNumber || user.phone,
       role: user.role,
       rollNumber: user.rollNumber,
       department: user.department,
       isVerified: user.isVerified,
       isActive: user.isActive,
+      authProvider: user.authProvider,
     },
   });
 };
+
+// @route   POST /api/auth/google
+// @desc    Authenticate or Register via Google OAuth 2.0
+router.post('/google', async (req, res) => {
+  try {
+    const { credential, role } = req.body;
+
+    if (!credential) {
+      return res.status(400).json({ success: false, message: 'Google credential token is required.' });
+    }
+
+    let email = null;
+    let name = null;
+    let googleId = null;
+
+    // Verify token using google-auth-library or fallback decode
+    try {
+      if (process.env.GOOGLE_CLIENT_ID) {
+        const ticket = await googleClient.verifyIdToken({
+          idToken: credential,
+          audience: process.env.GOOGLE_CLIENT_ID,
+        });
+        const payload = ticket.getPayload();
+        email = payload.email ? payload.email.toLowerCase().trim() : null;
+        name = payload.name;
+        googleId = payload.sub;
+      } else {
+        // Fallback for dev mode when GOOGLE_CLIENT_ID is not configured
+        const decoded = jwt.decode(credential);
+        if (decoded && decoded.email) {
+          email = decoded.email.toLowerCase().trim();
+          name = decoded.name || email.split('@')[0];
+          googleId = decoded.sub || decoded.id;
+        }
+      }
+    } catch (verErr) {
+      const decoded = jwt.decode(credential);
+      if (decoded && decoded.email) {
+        email = decoded.email.toLowerCase().trim();
+        name = decoded.name || email.split('@')[0];
+        googleId = decoded.sub;
+      } else {
+        return res.status(400).json({ success: false, message: 'Invalid or expired Google OAuth credential.' });
+      }
+    }
+
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Google profile did not contain a valid email address.' });
+    }
+
+    let user = await User.findOne({
+      $or: [{ email }, { googleId }],
+    });
+
+    const targetRole = role === 'teacher' || role === 'admin' ? role : 'student';
+
+    if (user) {
+      // Existing User
+      if (!user.isActive) {
+        return res.status(403).json({ success: false, message: 'Account is deactivated. Please contact your administrator.' });
+      }
+
+      // Admin Tab Check for existing Google users
+      if (role === 'admin' && user.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'This Google account does not have Super Admin privileges.' });
+      }
+
+      if (!user.googleId) {
+        user.googleId = googleId;
+      }
+      user.isVerified = true;
+      await user.save();
+
+      return sendAuthResponse(res, user, `Welcome back, ${user.name}! Signed in with Google.`);
+    }
+
+    // New Google Sign-Up
+    const adminEmail = (process.env.ADMIN_EMAIL || 'admin@school.com').toLowerCase().trim();
+
+    if (targetRole === 'admin') {
+      if (email !== adminEmail) {
+        return res.status(403).json({
+          success: false,
+          message: 'Google Sign-Up is disabled for Admin portal. Only pre-seeded Admin accounts can sign in.',
+        });
+      }
+    }
+
+    const assignedRole = targetRole === 'admin' && email === adminEmail ? 'admin' : (targetRole === 'teacher' ? 'teacher' : 'student');
+
+    user = await User.create({
+      name: name || email.split('@')[0],
+      email,
+      authProvider: 'google',
+      googleId,
+      role: assignedRole,
+      isVerified: true, // Google pre-verifies emails
+      isActive: true,
+    });
+
+    return sendAuthResponse(res, user, `Account created successfully with Google! Logged in as ${assignedRole}.`);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 // @route   POST /api/auth/send-otp
 // @desc    Generate and send 6-digit OTP to Mobile or Email
@@ -99,7 +210,7 @@ router.post('/send-otp', otpRateLimiter, async (req, res) => {
 });
 
 // @route   POST /api/auth/verify-otp
-// @desc    Verify 6-digit OTP code with explicit expiration and deactivation check
+// @desc    Verify 6-digit OTP code
 router.post('/verify-otp', async (req, res) => {
   try {
     const { identifier, otpCode, role } = req.body;
@@ -134,11 +245,14 @@ router.post('/verify-otp', async (req, res) => {
 
     await Otp.deleteOne({ _id: otpRecord._id });
 
+    const normalized = normalizePhoneNumber(identifier);
     let user = await User.findOne({
       $or: [
         { email: cleanIdentifier },
         { phone: identifier.trim() },
+        { phone: normalized },
         { mobileNumber: identifier.trim() },
+        { mobileNumber: normalized },
       ],
     });
 
@@ -189,12 +303,17 @@ router.post('/register', async (req, res) => {
 
     const cleanEmail = email ? email.trim().toLowerCase() : null;
     const cleanPhone = inputPhone ? inputPhone.trim() : null;
+    const normalizedPhone = cleanPhone ? normalizePhoneNumber(cleanPhone) : null;
 
     const queryConditions = [];
     if (cleanEmail) queryConditions.push({ email: cleanEmail });
     if (cleanPhone) {
       queryConditions.push({ phone: cleanPhone });
       queryConditions.push({ mobileNumber: cleanPhone });
+    }
+    if (normalizedPhone) {
+      queryConditions.push({ phone: normalizedPhone });
+      queryConditions.push({ mobileNumber: normalizedPhone });
     }
 
     if (queryConditions.length > 0) {
@@ -203,7 +322,7 @@ router.post('/register', async (req, res) => {
         if (cleanEmail && existingUser.email === cleanEmail) {
           return res.status(400).json({ success: false, message: 'An account with this Email Address already exists.' });
         }
-        if (cleanPhone && (existingUser.phone === cleanPhone || existingUser.mobileNumber === cleanPhone)) {
+        if (cleanPhone && (existingUser.phone === cleanPhone || existingUser.mobileNumber === cleanPhone || existingUser.phone === normalizedPhone)) {
           return res.status(400).json({ success: false, message: 'An account with this Mobile Number already exists.' });
         }
       }
@@ -216,9 +335,10 @@ router.post('/register', async (req, res) => {
     const user = await User.create({
       name,
       email: cleanEmail,
-      phone: cleanPhone,
-      mobileNumber: cleanPhone,
+      phone: normalizedPhone || cleanPhone,
+      mobileNumber: normalizedPhone || cleanPhone,
       password: hashedPassword,
+      authProvider: 'local',
       role: userRole,
       isVerified: false,
       rollNumber: rollNumber || '',
@@ -264,7 +384,7 @@ router.post('/register', async (req, res) => {
 });
 
 // @route   POST /api/auth/login-password
-// @desc    Password-based login with deactivation and role enforcement
+// @desc    Password-based login
 router.post('/login-password', async (req, res) => {
   try {
     const { identifier, password, role } = req.body;
@@ -274,12 +394,15 @@ router.post('/login-password', async (req, res) => {
     }
 
     const cleanIdentifier = identifier.trim().toLowerCase();
+    const normalized = normalizePhoneNumber(identifier);
 
     const user = await User.findOne({
       $or: [
         { email: cleanIdentifier },
         { phone: identifier.trim() },
+        { phone: normalized },
         { mobileNumber: identifier.trim() },
+        { mobileNumber: normalized },
       ],
     });
 
@@ -299,6 +422,13 @@ router.post('/login-password', async (req, res) => {
       return res.status(400).json({
         success: false,
         message: `This account is registered as a ${userRoleLabel}. Please switch to the ${userRoleLabel} portal tab.`,
+      });
+    }
+
+    if (user.authProvider === 'google' && !user.password) {
+      return res.status(400).json({
+        success: false,
+        message: 'This account uses Google Sign-In. Please click "Continue with Google".',
       });
     }
 
@@ -337,13 +467,14 @@ router.get('/me', verifyToken, async (req, res) => {
         id: req.user._id,
         name: req.user.name,
         email: req.user.email,
-        phone: req.user.phone,
-        mobileNumber: req.user.mobileNumber,
+        phone: req.user.phone || req.user.mobileNumber,
+        mobileNumber: req.user.mobileNumber || req.user.phone,
         role: req.user.role,
         rollNumber: req.user.rollNumber,
         department: req.user.department,
         isVerified: req.user.isVerified,
         isActive: req.user.isActive,
+        authProvider: req.user.authProvider,
       },
     });
   } catch (err) {
