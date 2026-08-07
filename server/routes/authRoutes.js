@@ -445,6 +445,83 @@ router.post('/login-password', async (req, res) => {
   }
 });
 
+// @route   PUT /api/auth/profile
+// @desc    Update current user profile details
+router.put('/profile', verifyToken, async (req, res) => {
+  try {
+    const { name, email, phone, mobileNumber, rollNumber, department, currentPassword, newPassword } = req.body;
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User profile not found.' });
+    }
+
+    if (name) user.name = name.trim();
+    if (rollNumber !== undefined) user.rollNumber = rollNumber.trim();
+    if (department !== undefined) user.department = department.trim();
+
+    if (email && email.trim().toLowerCase() !== (user.email || '')) {
+      const cleanEmail = email.trim().toLowerCase();
+      const existing = await User.findOne({ email: cleanEmail, _id: { $ne: user._id } });
+      if (existing) {
+        return res.status(400).json({ success: false, message: 'This Email Address is already in use by another account.' });
+      }
+      user.email = cleanEmail;
+    }
+
+    const inputPhone = phone || mobileNumber;
+    if (inputPhone && inputPhone.trim() !== (user.phone || '')) {
+      const cleanPhone = inputPhone.trim();
+      const normalizedPhone = normalizePhoneNumber(cleanPhone);
+      const existing = await User.findOne({
+        _id: { $ne: user._id },
+        $or: [{ phone: cleanPhone }, { phone: normalizedPhone }, { mobileNumber: cleanPhone }, { mobileNumber: normalizedPhone }],
+      });
+      if (existing) {
+        return res.status(400).json({ success: false, message: 'This Mobile Number is already in use by another account.' });
+      }
+      user.phone = normalizedPhone || cleanPhone;
+      user.mobileNumber = normalizedPhone || cleanPhone;
+    }
+
+    if (newPassword) {
+      if (newPassword.length < 6) {
+        return res.status(400).json({ success: false, message: 'New password must be at least 6 characters long.' });
+      }
+      if (user.password && currentPassword) {
+        const isMatch = await bcrypt.compare(currentPassword, user.password);
+        if (!isMatch) {
+          return res.status(400).json({ success: false, message: 'Current password is incorrect.' });
+        }
+      }
+      const salt = await bcrypt.genSalt(10);
+      user.password = await bcrypt.hash(newPassword, salt);
+    }
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully!',
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone || user.mobileNumber,
+        mobileNumber: user.mobileNumber || user.phone,
+        role: user.role,
+        rollNumber: user.rollNumber,
+        department: user.department,
+        isVerified: user.isVerified,
+        isActive: user.isActive,
+        authProvider: user.authProvider,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // @route   POST /api/auth/logout
 router.post('/logout', (req, res) => {
   res.clearCookie('token');

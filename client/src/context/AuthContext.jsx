@@ -71,6 +71,14 @@ export const AuthProvider = ({ children }) => {
     return res.data;
   };
 
+  const updateProfile = async (profileData) => {
+    const res = await api.put('/auth/profile', profileData);
+    if (res.data.success && res.data.user) {
+      setUser(res.data.user);
+    }
+    return res.data;
+  };
+
   const logout = async () => {
     try {
       await api.post('/auth/logout');
@@ -92,6 +100,7 @@ export const AuthProvider = ({ children }) => {
         sendOtp,
         verifyOtp,
         register,
+        updateProfile,
         logout,
         isAdmin: user?.role === 'admin',
         isTeacher: user?.role === 'teacher',
