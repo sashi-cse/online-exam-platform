@@ -2,6 +2,9 @@ const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const dotenv = require('dotenv');
+const path = require('path');
+const fs = require('fs');
+
 const connectDB = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
 const examRoutes = require('./routes/examRoutes');
@@ -41,15 +44,54 @@ app.use('/api/results', resultRoutes);
 app.use('/api/booklet', bookletRoutes);
 app.use('/api/admin', adminRoutes);
 
-// Serve static frontend in production / deployment
-const path = require('path');
-const fs = require('fs');
-const clientDistPath = path.join(__dirname, '../client/dist');
+// Locate frontend build directory across potential deployment directory structures
+const possibleDistPaths = [
+  path.join(__dirname, '../client/dist'),
+  path.join(process.cwd(), 'client/dist'),
+  path.join(__dirname, 'client/dist'),
+  path.join(process.cwd(), 'dist'),
+];
 
-if (fs.existsSync(clientDistPath)) {
+let clientDistPath = possibleDistPaths.find((p) => fs.existsSync(p));
+
+if (clientDistPath) {
+  console.log(`✅ Serving static frontend from: ${clientDistPath}`);
   app.use(express.static(clientDistPath));
   app.get('*', (req, res) => {
-    res.sendFile(path.join(clientDistPath, 'index.html'));
+    const indexPath = path.join(clientDistPath, 'index.html');
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.status(404).send('Frontend index.html missing');
+    }
+  });
+} else {
+  console.warn('⚠️ WARNING: Frontend dist folder not found. Add Build Command: npm run build');
+  app.get('*', (req, res) => {
+    res.status(200).send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>PrepPulse Online Exam Platform</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <style>
+            body { background-color: #0f172a; color: #ffffff; font-family: system-ui, sans-serif; display: flex; flex-direction: column; items-align: center; justify-content: center; min-height: 100vh; margin: 0; text-align: center; padding: 20px; }
+            .card { background: #1e293b; padding: 40px; border-radius: 20px; border: 1px solid #334155; max-width: 500px; margin: 0 auto; shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
+            h1 { color: #60a5fa; margin-bottom: 10px; }
+            p { color: #94a3b8; font-size: 14px; line-height: 1.6; }
+            .btn { display: inline-block; margin-top: 20px; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 12px; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <h1>PrepPulse Exam Platform</h1>
+            <p>API Server is live and connected! Frontend assets are building on Render.</p>
+            <p><strong>Health Status:</strong> <a href="/api/health" style="color:#fbbf24;">/api/health (OK)</a></p>
+            <a href="/" class="btn" onclick="location.reload(); return false;">Refresh Page</a>
+          </div>
+        </body>
+      </html>
+    `);
   });
 }
 
