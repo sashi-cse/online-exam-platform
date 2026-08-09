@@ -2,6 +2,7 @@ const express = require('express');
 const Result = require('../models/Result');
 const Exam = require('../models/Exam');
 const Question = require('../models/Question');
+const User = require('../models/User');
 const { verifyToken, verifyTeacherOrAdmin } = require('../middleware/auth');
 
 const router = express.Router();
@@ -77,6 +78,28 @@ const isExamTimeExpired = (result, exam) => {
   const maxAllowedMs = (exam.durationMinutes * 60 + 60) * 1000; // 60s grace period for network delay
   return Date.now() - startTimeMs > maxAllowedMs;
 };
+
+// @route   POST /api/results/reset-mine
+// @desc    Reset all attempts for logged in student or specified student (allows test retake)
+router.post('/reset-mine', verifyToken, async (req, res) => {
+  try {
+    const { studentId, examId } = req.body;
+    const targetStudentId = (req.user.role === 'admin' || req.user.role === 'teacher') && studentId ? studentId : req.user._id;
+
+    const query = { studentId: targetStudentId };
+    if (examId) query.examId = examId;
+
+    const deleted = await Result.deleteMany(query);
+
+    res.json({
+      success: true,
+      message: `Reset complete! Deleted ${deleted.deletedCount} exam attempt(s). Student may now retake the test.`,
+      deletedCount: deleted.deletedCount,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 // @route   POST /api/results/start/:examId
 // @desc    Start or resume an exam attempt
@@ -167,7 +190,7 @@ router.post('/save-progress/:resultId', verifyToken, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Exam record not found.' });
     }
 
-    // Task 4: Server-Side Time-Limit Enforcement
+    // Server-Side Time-Limit Enforcement
     if (isExamTimeExpired(result, exam)) {
       const { answers } = req.body;
       if (answers && Array.isArray(answers)) {
@@ -277,7 +300,7 @@ router.get('/exam/:examId/analytics', verifyToken, verifyTeacherOrAdmin, async (
       return res.status(404).json({ success: false, message: 'Exam not found.' });
     }
 
-    // Task 5: Scoped analytics access for teachers
+    // Scoped analytics access for teachers
     if (req.user.role === 'teacher' && exam.createdBy && exam.createdBy.toString() !== req.user._id.toString()) {
       return res.status(403).json({ success: false, message: 'Forbidden. You can only view analytics for exams created by you.' });
     }
@@ -324,7 +347,7 @@ router.get('/exam/:examId/analytics', verifyToken, verifyTeacherOrAdmin, async (
 });
 
 // @route   GET /api/results/:resultId
-// @desc    Get detailed report breakdown for a specific attempt (Task 3: Never leak answers for in_progress attempts)
+// @desc    Get detailed report breakdown for a specific attempt
 router.get('/:resultId', verifyToken, async (req, res) => {
   try {
     const result = await Result.findById(req.params.resultId)
@@ -346,7 +369,6 @@ router.get('/:resultId', verifyToken, async (req, res) => {
 
     const questions = await Question.find({ examId: result.examId._id }).sort({ questionNumber: 1 });
 
-    // Task 3: Only reveal correctOption and solution if attempt is submitted/auto_submitted AND (user is teacher/admin OR is student owner)
     const isSubmitted = result.status === 'submitted' || result.status === 'auto_submitted';
     const canViewAnswers = isSubmitted && (isAdmin || isTeacherOwner || (req.user.role === 'student' && isOwner));
 
@@ -382,7 +404,6 @@ router.get('/:resultId', verifyToken, async (req, res) => {
       success: true,
       result: {
         ...result.toObject(),
-        // Omit total score & breakdown details if still in_progress for a student
         score: canViewAnswers ? result.score : undefined,
         percentage: canViewAnswers ? result.percentage : undefined,
       },

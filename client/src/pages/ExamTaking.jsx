@@ -387,14 +387,14 @@ const ExamTaking = () => {
 
           </div>
 
-          {/* Action Bar Footer */}
-          <div className="mt-8 pt-6 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
+          {/* Sticky Action Bar Footer (Always visible on screen 1 without scrolling) */}
+          <div className="sticky bottom-0 bg-slate-950/95 backdrop-blur-md mt-6 pt-4 pb-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 z-20">
             <div className="flex items-center gap-2">
               <button
                 onClick={handleToggleReview}
                 className={`px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all ${
                   currentState.isMarkedForReview
-                    ? 'bg-purple-600 text-white border-purple-500'
+                    ? 'bg-purple-600 text-white border-purple-500 shadow-md shadow-purple-600/20'
                     : 'bg-slate-900 text-purple-400 border-purple-500/30 hover:bg-purple-500/10'
                 }`}
               >
@@ -423,7 +423,7 @@ const ExamTaking = () => {
               <button
                 onClick={() => setCurrentIndex((prev) => Math.min(questions.length - 1, prev + 1))}
                 disabled={currentIndex === questions.length - 1}
-                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-blue-500/25 flex items-center gap-1 disabled:opacity-40"
+                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-extrabold shadow-lg shadow-blue-500/25 flex items-center gap-1.5 disabled:opacity-40 transition-all hover:scale-105"
               >
                 Save & Next <ChevronRight className="w-4 h-4" />
               </button>
