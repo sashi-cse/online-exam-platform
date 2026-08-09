@@ -217,7 +217,7 @@ const Register = () => {
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       className="block w-full pl-10 pr-3 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                      placeholder={role === 'teacher' ? "Prof. Rajesh Kumar" : "Rahul Verma"}
+                      placeholder={role === 'teacher' ? "Prof. Rajesh Kumar" : "Akansha"}
                     />
                   </div>
                 </div>
