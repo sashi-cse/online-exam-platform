@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
-import { BookOpen, Clock, Award, Play, CheckCircle2, ShieldAlert, Sparkles, HelpCircle } from 'lucide-react';
+import { BookOpen, Clock, Award, Play, CheckCircle2, ShieldAlert, Sparkles, HelpCircle, RotateCcw } from 'lucide-react';
 
 const StudentDashboard = () => {
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [resettingId, setResettingId] = useState(null);
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -30,6 +31,23 @@ const StudentDashboard = () => {
 
   const handleStartExam = (examId) => {
     navigate(`/exam/take/${examId}`);
+  };
+
+  const handleResetAttempt = async (examId) => {
+    if (!window.confirm('Are you sure you want to reset your attempt? Your previous submission will be cleared so you can retake the test paper.')) {
+      return;
+    }
+    setResettingId(examId);
+    try {
+      const res = await api.post('/results/reset-mine', { examId });
+      if (res.data.success) {
+        await fetchExams();
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to reset test attempt.');
+    } finally {
+      setResettingId(null);
+    }
   };
 
   return (
@@ -139,12 +157,21 @@ const StudentDashboard = () => {
                             {exam.userAttempt.score} / {exam.userAttempt.totalMarks}
                           </span>
                         </div>
-                        <Link
-                          to={`/result/${exam.userAttempt.id}`}
-                          className="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors border border-slate-700"
-                        >
-                          View Detailed Solutions & Score
-                        </Link>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Link
+                            to={`/result/${exam.userAttempt.id}`}
+                            className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-1 transition-colors border border-slate-700"
+                          >
+                            Solutions
+                          </Link>
+                          <button
+                            onClick={() => handleResetAttempt(exam._id)}
+                            disabled={resettingId === exam._id}
+                            className="py-2.5 px-3 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-bold rounded-xl text-xs flex items-center justify-center gap-1 transition-all border border-amber-500/30 disabled:opacity-50"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" /> Retake Test
+                          </button>
+                        </div>
                       </div>
                     ) : (
                       <button
