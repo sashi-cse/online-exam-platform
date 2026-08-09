@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import MathRenderer from '../components/MathRenderer';
-import { Clock, ShieldAlert, CheckCircle, Flag, ChevronLeft, ChevronRight, Maximize2, Send, AlertTriangle } from 'lucide-react';
+import { Clock, ShieldAlert, Flag, ChevronLeft, ChevronRight, Maximize2, Send, AlertTriangle } from 'lucide-react';
 
 const ExamTaking = () => {
   const { examId } = useParams();
@@ -109,7 +109,6 @@ const ExamTaking = () => {
     };
 
     const handleBlur = () => {
-      // Small delay to prevent false trigger on click
       setTimeout(() => {
         if (document.hidden) {
           logTabSwitchViolation('Window Lost Focus');
@@ -132,7 +131,6 @@ const ExamTaking = () => {
       setWarningMessage(`Warning #${updatedCount}: ${reason}. Avoid switching tabs during the exam!`);
       setShowWarningModal(true);
 
-      // Save violation immediately to server
       api.post(`/results/save-progress/${resultId}`, {
         answers: prepareAnswersPayload(),
         tabSwitchCount: updatedCount,
@@ -266,7 +264,7 @@ const ExamTaking = () => {
   const currentState = userAnswers[currentQ?._id] || {};
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col select-none">
+    <div className="h-screen bg-slate-950 text-slate-100 flex flex-col select-none overflow-hidden">
       
       {/* Fullscreen Prompt Overlay */}
       {!hasStartedFullscreen && (
@@ -291,14 +289,13 @@ const ExamTaking = () => {
       )}
 
       {/* Top Header Bar */}
-      <header className="bg-slate-900 border-b border-slate-800 px-6 py-3 flex items-center justify-between sticky top-0 z-30">
+      <header className="h-14 bg-slate-900 border-b border-slate-800 px-6 flex items-center justify-between shrink-0 z-30">
         <div>
           <h1 className="font-extrabold text-base text-white">{exam?.title}</h1>
           <p className="text-xs text-slate-400 font-mono">Code: {exam?.bookletCode}</p>
         </div>
 
         <div className="flex items-center gap-6">
-          {/* Tab Switch warning count */}
           {tabSwitchCount > 0 && (
             <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-lg text-xs font-semibold">
               <ShieldAlert className="w-4 h-4" />
@@ -306,7 +303,7 @@ const ExamTaking = () => {
             </div>
           )}
 
-          {/* Fixed Countdown Timer */}
+          {/* Countdown Timer */}
           <div className={`flex items-center gap-2 px-4 py-1.5 rounded-xl border font-mono font-bold text-base ${
             timeLeftSeconds < 300
               ? 'bg-rose-500/10 border-rose-500/30 text-rose-400 animate-pulse'
@@ -315,192 +312,173 @@ const ExamTaking = () => {
             <Clock className="w-5 h-5" />
             <span>{formatTimer(timeLeftSeconds)}</span>
           </div>
-
-          <button
-            onClick={() => {
-              if (window.confirm('Are you sure you want to submit your exam now? Answers will be evaluated immediately.')) {
-                submitExam(false);
-              }
-            }}
-            disabled={submitting}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-600/20 transition-all disabled:opacity-50"
-          >
-            <Send className="w-3.5 h-3.5" /> Submit Exam
-          </button>
         </div>
       </header>
 
-      {/* Main Container */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-0 overflow-hidden">
+      {/* Main Grid Content Area (Fills space between header & fixed footer) */}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-0 overflow-hidden pb-16">
         
         {/* Question Canvas (Left 3 cols) */}
-        <div className="lg:col-span-3 p-6 sm:p-8 flex flex-col justify-between overflow-y-auto">
-          <div className="space-y-6 max-w-4xl">
-            
-            {/* Question Header */}
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-              <div className="flex items-center gap-3">
-                <span className="px-3 py-1 rounded-lg bg-blue-600/20 text-blue-400 font-extrabold text-sm border border-blue-500/30">
-                  Question {currentIndex + 1} of {questions.length}
-                </span>
-                <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                  {currentQ?.subject}
-                </span>
-              </div>
-
-              <div className="text-xs text-slate-400">
-                Marks: <strong className="text-emerald-400">+{currentQ?.marksForCorrect || 4}</strong> / <strong className="text-rose-400">-{currentQ?.negativeMarksForIncorrect || 1}</strong>
-              </div>
+        <div className="lg:col-span-3 p-6 sm:p-8 overflow-y-auto space-y-6">
+          
+          {/* Question Header */}
+          <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+            <div className="flex items-center gap-3">
+              <span className="px-3 py-1 rounded-lg bg-blue-600/20 text-blue-400 font-extrabold text-sm border border-blue-500/30">
+                Question {currentIndex + 1} of {questions.length}
+              </span>
+              <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                {currentQ?.subject}
+              </span>
             </div>
 
-            {/* Question Text */}
-            <div className="text-lg font-medium text-white leading-relaxed p-4 bg-slate-900/60 border border-slate-800 rounded-2xl">
-              <MathRenderer text={currentQ?.questionText} />
+            <div className="text-xs text-slate-400">
+              Marks: <strong className="text-emerald-400">+{currentQ?.marksForCorrect || 4}</strong> / <strong className="text-rose-400">-{currentQ?.negativeMarksForIncorrect || 1}</strong>
             </div>
-
-            {/* Options List */}
-            <div className="space-y-3 pt-2">
-              {currentQ?.options.map((opt, idx) => {
-                const isSelected = currentState.selectedOption === idx;
-                return (
-                  <button
-                    key={idx}
-                    onClick={() => handleSelectOption(idx)}
-                    className={`w-full p-4 rounded-xl border text-left flex items-center gap-3.5 transition-all ${
-                      isSelected
-                        ? 'bg-blue-600/20 border-blue-500 text-white font-semibold ring-1 ring-blue-500'
-                        : 'bg-slate-900 border-slate-800/80 hover:border-slate-700 text-slate-200 hover:bg-slate-800/50'
-                    }`}
-                  >
-                    <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
-                      isSelected ? 'bg-blue-500 text-white' : 'bg-slate-800 text-slate-400 border border-slate-700'
-                    }`}>
-                      {String.fromCharCode(65 + idx)}
-                    </span>
-                    <div className="text-sm">
-                      <MathRenderer text={opt} />
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
           </div>
 
-          {/* Sticky Action Bar Footer (Always visible on screen 1 without scrolling) */}
-          <div className="sticky bottom-0 bg-slate-950/95 backdrop-blur-md mt-6 pt-4 pb-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 z-20">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleToggleReview}
-                className={`px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all ${
-                  currentState.isMarkedForReview
-                    ? 'bg-purple-600 text-white border-purple-500 shadow-md shadow-purple-600/20'
-                    : 'bg-slate-900 text-purple-400 border-purple-500/30 hover:bg-purple-500/10'
-                }`}
-              >
-                <Flag className="w-3.5 h-3.5" />
-                {currentState.isMarkedForReview ? 'Marked for Review' : 'Mark for Review'}
-              </button>
+          {/* Question Text */}
+          <div className="text-lg font-medium text-white leading-relaxed p-4 bg-slate-900/60 border border-slate-800 rounded-2xl">
+            <MathRenderer text={currentQ?.questionText} />
+          </div>
 
-              <button
-                onClick={handleClearOption}
-                disabled={currentState.selectedOption === null}
-                className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-400 rounded-xl text-xs font-semibold border border-slate-800 transition-colors disabled:opacity-40"
-              >
-                Clear Response
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
-                disabled={currentIndex === 0}
-                className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl text-xs font-semibold border border-slate-800 disabled:opacity-40 flex items-center gap-1"
-              >
-                <ChevronLeft className="w-4 h-4" /> Previous
-              </button>
-
-              <button
-                onClick={() => setCurrentIndex((prev) => Math.min(questions.length - 1, prev + 1))}
-                disabled={currentIndex === questions.length - 1}
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-extrabold shadow-lg shadow-blue-500/25 flex items-center gap-1.5 disabled:opacity-40 transition-all hover:scale-105"
-              >
-                Save & Next <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+          {/* Options List */}
+          <div className="space-y-3 pt-2">
+            {currentQ?.options.map((opt, idx) => {
+              const isSelected = currentState.selectedOption === idx;
+              return (
+                <button
+                  key={idx}
+                  onClick={() => handleSelectOption(idx)}
+                  className={`w-full p-4 rounded-xl border text-left flex items-center gap-3.5 transition-all ${
+                    isSelected
+                      ? 'bg-blue-600/20 border-blue-500 text-white font-semibold ring-1 ring-blue-500'
+                      : 'bg-slate-900 border-slate-800/80 hover:border-slate-700 text-slate-200 hover:bg-slate-800/50'
+                  }`}
+                >
+                  <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
+                    isSelected ? 'bg-blue-500 text-white' : 'bg-slate-800 text-slate-400 border border-slate-700'
+                  }`}>
+                    {String.fromCharCode(65 + idx)}
+                  </span>
+                  <div className="text-sm">
+                    <MathRenderer text={opt} />
+                  </div>
+                </button>
+              );
+            })}
           </div>
 
         </div>
 
         {/* Question Palette Sidebar (Right 1 col) */}
-        <div className="bg-slate-900 border-l border-slate-800 p-6 flex flex-col justify-between overflow-y-auto">
-          <div className="space-y-5">
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider">Question Paper Palette</h3>
+        <div className="bg-slate-900 border-l border-slate-800 p-6 overflow-y-auto space-y-5">
+          <h3 className="text-sm font-bold text-white uppercase tracking-wider">Question Paper Palette</h3>
 
-            {/* Status Legend */}
-            <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-300">
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded bg-emerald-500"></span> Answered
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded bg-purple-600"></span> Marked Review
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded bg-slate-700"></span> Unattempted
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded ring-2 ring-blue-500 bg-slate-900"></span> Current
-              </div>
+          {/* Status Legend */}
+          <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-300">
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded bg-emerald-500"></span> Answered
             </div>
-
-            {/* Palette Grid */}
-            <div className="pt-3 border-t border-slate-800">
-              <div className="grid grid-cols-5 gap-2">
-                {questions.map((q, idx) => {
-                  const state = userAnswers[q._id] || {};
-                  const isCurrent = idx === currentIndex;
-                  const isAnswered = state.selectedOption !== null && state.selectedOption !== undefined;
-                  const isReview = state.isMarkedForReview;
-
-                  let bgColor = 'bg-slate-800 text-slate-300 hover:bg-slate-700';
-                  if (isReview) {
-                    bgColor = 'bg-purple-600 text-white';
-                  } else if (isAnswered) {
-                    bgColor = 'bg-emerald-600 text-white';
-                  }
-
-                  return (
-                    <button
-                      key={q._id}
-                      onClick={() => setCurrentIndex(idx)}
-                      className={`h-10 rounded-xl font-bold text-xs flex items-center justify-center transition-all ${bgColor} ${
-                        isCurrent ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-slate-950 scale-105' : ''
-                      }`}
-                    >
-                      {idx + 1}
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded bg-purple-600"></span> Marked Review
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded bg-slate-700"></span> Unattempted
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded ring-2 ring-blue-500 bg-slate-900"></span> Current
             </div>
           </div>
 
-          <div className="pt-6 border-t border-slate-800 text-center">
-            <button
-              onClick={() => {
-                if (window.confirm('Ready to submit your exam paper?')) {
-                  submitExam(false);
+          {/* Palette Grid */}
+          <div className="pt-3 border-t border-slate-800">
+            <div className="grid grid-cols-5 gap-2">
+              {questions.map((q, idx) => {
+                const state = userAnswers[q._id] || {};
+                const isCurrent = idx === currentIndex;
+                const isAnswered = state.selectedOption !== null && state.selectedOption !== undefined;
+                const isReview = state.isMarkedForReview;
+
+                let bgColor = 'bg-slate-800 text-slate-300 hover:bg-slate-700';
+                if (isReview) {
+                  bgColor = 'bg-purple-600 text-white';
+                } else if (isAnswered) {
+                  bgColor = 'bg-emerald-600 text-white';
                 }
-              }}
-              disabled={submitting}
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-emerald-600/20"
-            >
-              Submit Test Paper
-            </button>
+
+                return (
+                  <button
+                    key={q._id}
+                    onClick={() => setCurrentIndex(idx)}
+                    className={`h-10 rounded-xl font-bold text-xs flex items-center justify-center transition-all ${bgColor} ${
+                      isCurrent ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-slate-950 scale-105' : ''
+                    }`}
+                  >
+                    {idx + 1}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
       </div>
+
+      {/* PERMANENT FIXED GLOBAL FOOTER (Always visible across entire screen bottom) */}
+      <footer className="fixed bottom-0 left-0 right-0 h-16 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-6 flex items-center justify-between z-40 shadow-2xl">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleToggleReview}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition-all ${
+              currentState.isMarkedForReview
+                ? 'bg-purple-600 text-white border-purple-500 shadow-md shadow-purple-600/20'
+                : 'bg-slate-950 text-purple-400 border-purple-500/30 hover:bg-purple-500/10'
+            }`}
+          >
+            <Flag className="w-3.5 h-3.5" />
+            {currentState.isMarkedForReview ? 'Marked for Review' : 'Mark for Review'}
+          </button>
+
+          <button
+            onClick={handleClearOption}
+            disabled={currentState.selectedOption === null}
+            className="px-4 py-2.5 bg-slate-950 hover:bg-slate-800 text-slate-400 rounded-xl text-xs font-bold border border-slate-800 transition-colors disabled:opacity-40"
+          >
+            Clear Response
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
+            disabled={currentIndex === 0}
+            className="px-4 py-2.5 bg-slate-950 hover:bg-slate-800 text-slate-300 rounded-xl text-xs font-bold border border-slate-800 disabled:opacity-40 flex items-center gap-1"
+          >
+            <ChevronLeft className="w-4 h-4" /> Previous
+          </button>
+
+          <button
+            onClick={() => setCurrentIndex((prev) => Math.min(questions.length - 1, prev + 1))}
+            disabled={currentIndex === questions.length - 1}
+            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-extrabold shadow-lg shadow-blue-500/25 flex items-center gap-1.5 disabled:opacity-40 transition-all hover:scale-105"
+          >
+            Save & Next <ChevronRight className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={() => {
+              if (window.confirm('Ready to submit your exam paper? Answers will be evaluated immediately.')) {
+                submitExam(false);
+              }
+            }}
+            disabled={submitting}
+            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 transition-all disabled:opacity-50"
+          >
+            <Send className="w-3.5 h-3.5" /> Submit Test Paper
+          </button>
+        </div>
+      </footer>
 
       {/* Tab Switch Warning Modal Toast */}
       {showWarningModal && (
