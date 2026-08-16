@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: preppulse-online-exam
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        value: super_secret_prep_pulse_jwt_key_2026
