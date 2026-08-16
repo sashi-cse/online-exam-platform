@@ -61,9 +61,11 @@ const seedData = async () => {
     console.log(`   👨‍🏫 Teacher     : teacher@school.com / 9876543210 (Pass: teacher123)`);
     console.log(`   🎓 Student     : Akansha (student@school.com / 9123456789) (Pass: student123)`);
 
-    // Import and seed the 181-Question NEET Practice Test
+    // Import and seed Set 1 and Set 2 NEET Practice Tests
     const seedNeetExam = require('./seedNeetPracticeTest');
+    const seedNeetSet2Exam = require('./seedNeetSet2');
     await seedNeetExam();
+    await seedNeetSet2Exam();
 
   } catch (err) {
     console.error('❌ Seeding failed:', err);
