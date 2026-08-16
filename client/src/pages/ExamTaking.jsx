@@ -230,6 +230,12 @@ const ExamTaking = () => {
     }
   };
 
+  const confirmSubmit = () => {
+    if (window.confirm('Are you sure you want to submit your exam now? Answers will be evaluated immediately.')) {
+      submitExam(false);
+    }
+  };
+
   const enterFullscreen = () => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().then(() => {
@@ -288,57 +294,67 @@ const ExamTaking = () => {
         </div>
       )}
 
-      {/* Top Header Bar */}
-      <header className="h-14 bg-slate-900 border-b border-slate-800 px-6 flex items-center justify-between shrink-0 z-30">
-        <div>
-          <h1 className="font-extrabold text-base text-white">{exam?.title}</h1>
-          <p className="text-xs text-slate-400 font-mono">Code: {exam?.bookletCode}</p>
+      {/* Top Header Bar with Prominent Mobile & Desktop Submit Button */}
+      <header className="h-14 bg-slate-900 border-b border-slate-800 px-3 sm:px-6 flex items-center justify-between shrink-0 z-30">
+        <div className="truncate max-w-[150px] sm:max-w-none">
+          <h1 className="font-extrabold text-xs sm:text-base text-white truncate">{exam?.title}</h1>
+          <p className="text-[10px] sm:text-xs text-slate-400 font-mono">Code: {exam?.bookletCode}</p>
         </div>
 
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-2 sm:gap-4">
           {tabSwitchCount > 0 && (
-            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-lg text-xs font-semibold">
-              <ShieldAlert className="w-4 h-4" />
-              <span>{tabSwitchCount} Tab Switch Warning{tabSwitchCount > 1 ? 's' : ''}</span>
+            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-lg text-xs font-semibold">
+              <ShieldAlert className="w-3.5 h-3.5" />
+              <span>{tabSwitchCount} Warning{tabSwitchCount > 1 ? 's' : ''}</span>
             </div>
           )}
 
           {/* Countdown Timer */}
-          <div className={`flex items-center gap-2 px-4 py-1.5 rounded-xl border font-mono font-bold text-base ${
+          <div className={`flex items-center gap-1.5 px-2.5 sm:px-4 py-1.5 rounded-xl border font-mono font-bold text-xs sm:text-base ${
             timeLeftSeconds < 300
               ? 'bg-rose-500/10 border-rose-500/30 text-rose-400 animate-pulse'
               : 'bg-slate-800 border-slate-700 text-emerald-400'
           }`}>
-            <Clock className="w-5 h-5" />
+            <Clock className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
             <span>{formatTimer(timeLeftSeconds)}</span>
           </div>
+
+          {/* Top Header Submit Test Button (Prominent on Phone & Desktop) */}
+          <button
+            onClick={confirmSubmit}
+            disabled={submitting}
+            className="px-3 sm:px-4 py-1.5 sm:py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl text-xs flex items-center gap-1 sm:gap-1.5 shadow-lg shadow-emerald-600/20 transition-all active:scale-95 disabled:opacity-50 shrink-0"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>Submit</span>
+          </button>
         </div>
       </header>
 
-      {/* Main Grid Content Area (Fills space between header & fixed footer) */}
+      {/* Main Grid Content Area */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-0 overflow-hidden pb-16">
         
         {/* Question Canvas (Left 3 cols) */}
-        <div className="lg:col-span-3 p-6 sm:p-8 overflow-y-auto space-y-6">
+        <div className="lg:col-span-3 p-4 sm:p-8 overflow-y-auto space-y-6">
           
           {/* Question Header */}
-          <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-            <div className="flex items-center gap-3">
-              <span className="px-3 py-1 rounded-lg bg-blue-600/20 text-blue-400 font-extrabold text-sm border border-blue-500/30">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3 sm:pb-4">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <span className="px-2.5 py-1 rounded-lg bg-blue-600/20 text-blue-400 font-extrabold text-xs sm:text-sm border border-blue-500/30">
                 Question {currentIndex + 1} of {questions.length}
               </span>
-              <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+              <span className="px-2 py-0.5 rounded text-[11px] sm:text-xs font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
                 {currentQ?.subject}
               </span>
             </div>
 
-            <div className="text-xs text-slate-400">
+            <div className="text-[11px] sm:text-xs text-slate-400">
               Marks: <strong className="text-emerald-400">+{currentQ?.marksForCorrect || 4}</strong> / <strong className="text-rose-400">-{currentQ?.negativeMarksForIncorrect || 1}</strong>
             </div>
           </div>
 
           {/* Question Text */}
-          <div className="text-lg font-medium text-white leading-relaxed p-4 bg-slate-900/60 border border-slate-800 rounded-2xl">
+          <div className="text-base sm:text-lg font-medium text-white leading-relaxed p-4 bg-slate-900/60 border border-slate-800 rounded-2xl">
             <MathRenderer text={currentQ?.questionText} />
           </div>
 
@@ -350,7 +366,7 @@ const ExamTaking = () => {
                 <button
                   key={idx}
                   onClick={() => handleSelectOption(idx)}
-                  className={`w-full p-4 rounded-xl border text-left flex items-center gap-3.5 transition-all ${
+                  className={`w-full p-3.5 sm:p-4 rounded-xl border text-left flex items-center gap-3 transition-all ${
                     isSelected
                       ? 'bg-blue-600/20 border-blue-500 text-white font-semibold ring-1 ring-blue-500'
                       : 'bg-slate-900 border-slate-800/80 hover:border-slate-700 text-slate-200 hover:bg-slate-800/50'
@@ -361,7 +377,7 @@ const ExamTaking = () => {
                   }`}>
                     {String.fromCharCode(65 + idx)}
                   </span>
-                  <div className="text-sm">
+                  <div className="text-xs sm:text-sm">
                     <MathRenderer text={opt} />
                   </div>
                 </button>
@@ -371,12 +387,21 @@ const ExamTaking = () => {
 
         </div>
 
-        {/* Question Palette Sidebar (Right 1 col) */}
-        <div className="bg-slate-900 border-l border-slate-800 p-6 overflow-y-auto space-y-5">
-          <h3 className="text-sm font-bold text-white uppercase tracking-wider">Question Paper Palette</h3>
+        {/* Question Palette Sidebar */}
+        <div className="bg-slate-900 border-l border-slate-800 p-4 sm:p-6 overflow-y-auto space-y-5">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider">Question Paper Palette</h3>
+            <button
+              onClick={confirmSubmit}
+              disabled={submitting}
+              className="lg:hidden px-3 py-1 bg-emerald-600 text-white text-[11px] font-bold rounded-lg"
+            >
+              Submit Exam
+            </button>
+          </div>
 
           {/* Status Legend */}
-          <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-300">
+          <div className="grid grid-cols-2 gap-2 text-[10px] sm:text-[11px] text-slate-300">
             <div className="flex items-center gap-2">
               <span className="w-3 h-3 rounded bg-emerald-500"></span> Answered
             </div>
@@ -393,7 +418,7 @@ const ExamTaking = () => {
 
           {/* Palette Grid */}
           <div className="pt-3 border-t border-slate-800">
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
               {questions.map((q, idx) => {
                 const state = userAnswers[q._id] || {};
                 const isCurrent = idx === currentIndex;
@@ -411,7 +436,7 @@ const ExamTaking = () => {
                   <button
                     key={q._id}
                     onClick={() => setCurrentIndex(idx)}
-                    className={`h-10 rounded-xl font-bold text-xs flex items-center justify-center transition-all ${bgColor} ${
+                    className={`h-9 sm:h-10 rounded-xl font-bold text-[11px] sm:text-xs flex items-center justify-center transition-all ${bgColor} ${
                       isCurrent ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-slate-950 scale-105' : ''
                     }`}
                   >
@@ -425,57 +450,62 @@ const ExamTaking = () => {
 
       </div>
 
-      {/* PERMANENT FIXED GLOBAL FOOTER (Always visible across entire screen bottom) */}
-      <footer className="fixed bottom-0 left-0 right-0 h-16 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-6 flex items-center justify-between z-40 shadow-2xl">
-        <div className="flex items-center gap-2">
+      {/* PERMANENT FIXED GLOBAL FOOTER (Fully Responsive for Phone & Desktop) */}
+      <footer className="fixed bottom-0 left-0 right-0 h-16 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-2 sm:px-6 flex items-center justify-between z-40 shadow-2xl">
+        {/* Left Actions */}
+        <div className="flex items-center gap-1 sm:gap-2">
           <button
             onClick={handleToggleReview}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition-all ${
+            className={`px-2.5 sm:px-4 py-2 rounded-xl text-[11px] sm:text-xs font-bold flex items-center gap-1 border transition-all ${
               currentState.isMarkedForReview
                 ? 'bg-purple-600 text-white border-purple-500 shadow-md shadow-purple-600/20'
                 : 'bg-slate-950 text-purple-400 border-purple-500/30 hover:bg-purple-500/10'
             }`}
           >
             <Flag className="w-3.5 h-3.5" />
-            {currentState.isMarkedForReview ? 'Marked for Review' : 'Mark for Review'}
+            <span className="hidden sm:inline">{currentState.isMarkedForReview ? 'Marked for Review' : 'Mark for Review'}</span>
+            <span className="sm:hidden">Review</span>
           </button>
 
           <button
             onClick={handleClearOption}
             disabled={currentState.selectedOption === null}
-            className="px-4 py-2.5 bg-slate-950 hover:bg-slate-800 text-slate-400 rounded-xl text-xs font-bold border border-slate-800 transition-colors disabled:opacity-40"
+            className="px-2.5 sm:px-4 py-2 bg-slate-950 hover:bg-slate-800 text-slate-400 rounded-xl text-[11px] sm:text-xs font-bold border border-slate-800 transition-colors disabled:opacity-40"
           >
-            Clear Response
+            <span className="hidden sm:inline">Clear Response</span>
+            <span className="sm:hidden">Clear</span>
           </button>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* Right Actions */}
+        <div className="flex items-center gap-1.5 sm:gap-3">
           <button
             onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
             disabled={currentIndex === 0}
-            className="px-4 py-2.5 bg-slate-950 hover:bg-slate-800 text-slate-300 rounded-xl text-xs font-bold border border-slate-800 disabled:opacity-40 flex items-center gap-1"
+            className="px-2.5 sm:px-4 py-2 bg-slate-950 hover:bg-slate-800 text-slate-300 rounded-xl text-[11px] sm:text-xs font-bold border border-slate-800 disabled:opacity-40 flex items-center gap-1"
           >
-            <ChevronLeft className="w-4 h-4" /> Previous
+            <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span className="hidden sm:inline">Previous</span>
+            <span className="sm:hidden">Prev</span>
           </button>
 
           <button
             onClick={() => setCurrentIndex((prev) => Math.min(questions.length - 1, prev + 1))}
             disabled={currentIndex === questions.length - 1}
-            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-extrabold shadow-lg shadow-blue-500/25 flex items-center gap-1.5 disabled:opacity-40 transition-all hover:scale-105"
+            className="px-3 sm:px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-[11px] sm:text-xs font-extrabold shadow-lg shadow-blue-500/25 flex items-center gap-1 transition-all active:scale-95 disabled:opacity-40"
           >
-            Save & Next <ChevronRight className="w-4 h-4" />
+            <span>Save & Next</span>
+            <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
 
+          {/* Prominent Green Submit Test Button in Bottom Footer */}
           <button
-            onClick={() => {
-              if (window.confirm('Ready to submit your exam paper? Answers will be evaluated immediately.')) {
-                submitExam(false);
-              }
-            }}
+            onClick={confirmSubmit}
             disabled={submitting}
-            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 transition-all disabled:opacity-50"
+            className="px-3 sm:px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl text-[11px] sm:text-xs shadow-lg shadow-emerald-600/20 flex items-center gap-1 transition-all active:scale-95 disabled:opacity-50"
           >
-            <Send className="w-3.5 h-3.5" /> Submit Test Paper
+            <Send className="w-3.5 h-3.5" />
+            <span>Submit</span>
           </button>
         </div>
       </footer>
