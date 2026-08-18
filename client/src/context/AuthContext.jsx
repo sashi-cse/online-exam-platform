@@ -44,19 +44,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const sendOtp = async (identifier) => {
-    const res = await api.post('/auth/send-otp', { identifier });
-    return res.data;
-  };
 
-  const verifyOtp = async (identifier, otpCode, role) => {
-    const res = await api.post('/auth/verify-otp', { identifier, otpCode, role });
-    if (res.data.success && res.data.user) {
-      if (res.data.token) localStorage.setItem('token', res.data.token);
-      setUser(res.data.user);
-    }
-    return res.data;
-  };
 
   const register = async (name, email, phone, password, role = 'student', rollNumber = '', department = '') => {
     const res = await api.post('/auth/register', {
@@ -68,6 +56,12 @@ export const AuthProvider = ({ children }) => {
       rollNumber,
       department,
     });
+    if (res.data.token) {
+      localStorage.setItem('token', res.data.token);
+    }
+    if (res.data.user) {
+      setUser(res.data.user);
+    }
     return res.data;
   };
 
@@ -97,8 +91,7 @@ export const AuthProvider = ({ children }) => {
         loading,
         loginPassword,
         loginGoogle,
-        sendOtp,
-        verifyOtp,
+
         register,
         updateProfile,
         logout,
