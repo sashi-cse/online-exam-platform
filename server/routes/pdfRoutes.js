@@ -1,6 +1,5 @@
 const express = require('express');
 const multer = require('multer');
-const pdfParse = require('pdf-parse');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const Exam = require('../models/Exam');
 const { generateTestCode } = require('../models/Exam');
@@ -21,6 +20,24 @@ const upload = multer({
     }
   },
 });
+
+// Helper: Extract text using pdf-parse (supports function & class exports)
+async function extractPdfText(buffer) {
+  try {
+    const pdfModule = require('pdf-parse');
+    if (typeof pdfModule === 'function') {
+      const data = await pdfModule(buffer);
+      return { text: data.text || '', pages: data.numpages || 1 };
+    } else if (pdfModule && pdfModule.PDFParse) {
+      const parser = new pdfModule.PDFParse({ data: buffer });
+      const data = await parser.getText();
+      return { text: data.text || '', pages: data.total || 1 };
+    }
+  } catch (e) {
+    console.warn('⚠️ pdf-parse text extraction warning:', e.message);
+  }
+  return { text: '', pages: 1 };
+}
 
 // Gemini AI prompt to parse PDF content into structured questions
 const PARSE_PROMPT = `You are an expert exam paper parser. I am providing a question paper PDF document. Your job is to parse it into structured JSON.
@@ -53,8 +70,18 @@ Return ONLY a valid JSON object matching this exact schema (no markdown, no prea
   ]
 }`;
 
+// Candidate Gemini models to try in sequence for maximum compatibility across regions/API versions
+const CANDIDATE_MODELS = [
+  'gemini-1.5-flash-latest',
+  'gemini-1.5-flash',
+  'gemini-2.0-flash-exp',
+  'gemini-1.5-flash-002',
+  'gemini-1.5-pro',
+  'gemini-pro',
+];
+
 // @route   POST /api/pdf/parse
-// @desc    Upload PDF, extract & parse using Gemini AI (supports text + native PDF multimodal parsing)
+// @desc    Upload PDF, extract & parse using Gemini AI (with robust multi-model fallback & dual parsing strategies)
 router.post('/parse', verifyToken, verifyTeacherOrAdmin, upload.single('pdf'), async (req, res) => {
   try {
     if (!req.file) {
@@ -67,51 +94,64 @@ router.post('/parse', verifyToken, verifyTeacherOrAdmin, upload.single('pdf'), a
     if (!apiKey) {
       return res.status(500).json({
         success: false,
-        message: 'GEMINI_API_KEY is not configured on the server. Please add GEMINI_API_KEY in environment variables.',
+        message: 'GEMINI_API_KEY is not configured on the server. Please add GEMINI_API_KEY in Render environment variables.',
       });
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-    let result;
-    let extractedText = '';
-    let pageCount = 1;
-
-    // Strategy 1: Try pdf-parse text extraction
-    try {
-      const pdfData = await pdfParse(req.file.buffer);
-      if (pdfData && pdfData.text && pdfData.text.trim().length >= 50) {
-        extractedText = pdfData.text;
-        pageCount = pdfData.numpages || 1;
-        console.log(`📝 Extracted ${extractedText.length} chars via pdf-parse (${pageCount} pages)`);
-      }
-    } catch (pdfErr) {
-      console.warn('⚠️ pdf-parse text extraction failed or skipped:', pdfErr.message);
+    // Extract text via pdf-parse helper
+    const { text: extractedText, pages: pageCount } = await extractPdfText(req.file.buffer);
+    if (extractedText) {
+      console.log(`📝 Extracted ${extractedText.length} chars from PDF (${pageCount} pages)`);
+    } else {
+      console.log('📦 Text extraction skipped/failed — using direct binary PDF upload to Gemini AI.');
     }
 
-    // Strategy 2: Call Gemini AI
-    console.log('🤖 Sending to Gemini AI for intelligent parsing...');
+    // Prepare inputs
+    const maxChars = 120000;
+    const textContent = extractedText && extractedText.length >= 50
+      ? (extractedText.length > maxChars ? extractedText.substring(0, maxChars) + '\n\n[TRUNCATED]' : extractedText)
+      : null;
 
-    if (extractedText && extractedText.length >= 50) {
-      // Send extracted text to Gemini
-      const maxChars = 120000;
-      const textToSend = extractedText.length > maxChars
-        ? extractedText.substring(0, maxChars) + '\n\n[TRUNCATED]'
-        : extractedText;
+    const pdfPart = {
+      inlineData: {
+        data: req.file.buffer.toString('base64'),
+        mimeType: 'application/pdf',
+      },
+    };
 
-      result = await model.generateContent([PARSE_PROMPT, textToSend]);
-    } else {
-      // Fallback: Send PDF buffer directly to Gemini via native multimodal inlineData
-      console.log('📦 Falling back to native Gemini PDF binary parsing...');
-      const pdfPart = {
-        inlineData: {
-          data: req.file.buffer.toString('base64'),
-          mimeType: 'application/pdf',
-        },
-      };
+    let result = null;
+    let lastErr = null;
 
-      result = await model.generateContent([PARSE_PROMPT, pdfPart]);
+    // Try candidate models in order until one succeeds
+    for (const modelName of CANDIDATE_MODELS) {
+      try {
+        console.log(`🤖 Trying Gemini model: ${modelName}...`);
+        const model = genAI.getGenerativeModel({ model: modelName });
+
+        if (textContent) {
+          result = await model.generateContent([PARSE_PROMPT, textContent]);
+        } else {
+          result = await model.generateContent([PARSE_PROMPT, pdfPart]);
+        }
+
+        if (result && result.response) {
+          console.log(`✅ Successfully generated content using Gemini model: ${modelName}`);
+          break;
+        }
+      } catch (mErr) {
+        console.warn(`⚠️ Model ${modelName} failed:`, mErr.message);
+        lastErr = mErr;
+      }
+    }
+
+    if (!result || !result.response) {
+      console.error('❌ All candidate Gemini models failed. Last error:', lastErr?.message);
+      return res.status(500).json({
+        success: false,
+        message: `Gemini AI API error: ${lastErr?.message || 'Could not connect to Gemini models.'}`,
+      });
     }
 
     const responseText = result.response.text();
@@ -130,18 +170,18 @@ router.post('/parse', verifyToken, verifyTeacherOrAdmin, upload.single('pdf'), a
       console.error('Raw AI response sample:', responseText.substring(0, 300));
       return res.status(500).json({
         success: false,
-        message: 'AI processing completed, but response could not be formatted into questions. Please check PDF file formatting.',
+        message: 'AI processed the PDF, but output format was invalid. Please retry uploading.',
       });
     }
 
     if (!parsed.questions || !Array.isArray(parsed.questions) || parsed.questions.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'No multiple-choice questions found in the PDF. Please ensure the PDF contains clear MCQ questions.',
+        message: 'No multiple-choice questions found in the PDF. Please check that the PDF contains clear MCQ questions.',
       });
     }
 
-    // Validate and clean up each question
+    // Validate and clean up questions
     const validQuestions = parsed.questions
       .filter(q => q.questionText && q.options && Array.isArray(q.options) && q.options.length >= 2)
       .map((q, idx) => ({
