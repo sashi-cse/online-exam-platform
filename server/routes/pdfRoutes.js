@@ -9,12 +9,12 @@ const { verifyToken, verifyTeacherOrAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Multer: store PDF in memory (max 20MB)
+// Multer: store PDF in memory (max 25MB)
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 },
+  limits: { fileSize: 25 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'application/pdf') {
+    if (file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf')) {
       cb(null, true);
     } else {
       cb(new Error('Only PDF files are allowed.'), false);
@@ -22,160 +22,160 @@ const upload = multer({
   },
 });
 
-// Gemini AI prompt to parse extracted PDF text into structured questions
-const PARSE_PROMPT = `You are an expert exam paper parser. I will give you the raw text extracted from a question paper PDF. Your job is to parse it into structured JSON.
+// Gemini AI prompt to parse PDF content into structured questions
+const PARSE_PROMPT = `You are an expert exam paper parser. I am providing a question paper PDF document. Your job is to parse it into structured JSON.
 
 RULES:
-1. Extract EVERY question found in the text.
-2. Each question must have: questionText, options (array of 4 strings), correctOption (0-indexed integer 0-3), subject (if detectable from section headers, otherwise "General"), and solution (empty string if not available).
-3. If there is an answer key section at the end, use it to set the correctOption for each question.
-4. If no answer key is found, set correctOption to 0 for all questions and set "hasAnswerKey" to false.
-5. Clean up the question text - remove question numbers but keep the content. Keep any mathematical notation.
-6. For options, remove option labels like (A), (B), (a), (b), 1), 2) etc. Keep only the option content.
-7. Try to detect the subject from section headers like "PHYSICS", "CHEMISTRY", "BIOLOGY", "MATHEMATICS" etc.
+1. Extract EVERY question found in the document.
+2. Each question must have:
+   - questionText: The full question text.
+   - options: Array of 4 strings corresponding to options A, B, C, D (or 1, 2, 3, 4).
+   - correctOption: 0-indexed integer (0 for A, 1 for B, 2 for C, 3 for D).
+   - subject: The subject section (e.g. "Physics", "Chemistry", "Botany", "Zoology", "Mathematics", or "General").
+   - solution: Explanation if given in the document, otherwise empty string "".
+3. If an answer key or detailed solution section is included in the document, use it to accurately populate correctOption and solution for each question.
+4. Clean up question numbers from questionText, but preserve mathematical symbols, formulas, and formatting.
+5. For options, clean up prefixes like (A), (B), (a), (b) — return only option content strings.
 
-Return ONLY valid JSON in this exact format (no markdown, no code fences, no explanation):
+Return ONLY a valid JSON object matching this exact schema (no markdown, no preamble):
 {
   "hasAnswerKey": true,
-  "suggestedTitle": "A suggested exam title based on the content",
-  "suggestedSubject": "The primary subject detected",
+  "suggestedTitle": "A suggested exam title",
+  "suggestedSubject": "Primary subject",
   "questions": [
     {
-      "questionText": "The question text here",
-      "options": ["Option A text", "Option B text", "Option C text", "Option D text"],
+      "questionText": "Question string here",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
       "correctOption": 0,
       "subject": "Physics",
-      "solution": ""
+      "solution": "Solution explanation if available"
     }
   ]
-}
-
-Here is the PDF text to parse:
-
-`;
+}`;
 
 // @route   POST /api/pdf/parse
-// @desc    Upload PDF, extract text, parse with Gemini AI into structured questions
+// @desc    Upload PDF, extract & parse using Gemini AI (supports text + native PDF multimodal parsing)
 router.post('/parse', verifyToken, verifyTeacherOrAdmin, upload.single('pdf'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'Please upload a PDF file.' });
     }
 
-    // Step 1: Extract text from PDF
-    console.log(`📄 Parsing PDF: ${req.file.originalname} (${(req.file.size / 1024).toFixed(1)} KB)`);
-    
-    let pdfData;
-    try {
-      pdfData = await pdfParse(req.file.buffer);
-    } catch (pdfErr) {
-      return res.status(400).json({
-        success: false,
-        message: 'Failed to read PDF. The file may be corrupted, password-protected, or image-only (scanned).',
-      });
-    }
+    console.log(`📄 Received PDF: ${req.file.originalname} (${(req.file.size / 1024).toFixed(1)} KB)`);
 
-    const extractedText = pdfData.text;
-    if (!extractedText || extractedText.trim().length < 50) {
-      return res.status(400).json({
-        success: false,
-        message: 'Could not extract enough text from the PDF. It may be a scanned/image PDF. Please use a text-based PDF.',
-      });
-    }
-
-    console.log(`📝 Extracted ${extractedText.length} characters from PDF (${pdfData.numpages} pages)`);
-
-    // Step 2: Parse with Gemini AI
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return res.status(500).json({
         success: false,
-        message: 'GEMINI_API_KEY is not configured. Please add it to your environment variables.',
+        message: 'GEMINI_API_KEY is not configured on the server. Please add GEMINI_API_KEY in environment variables.',
       });
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-    // Truncate text if too long (Gemini has token limits)
-    const maxChars = 100000;
-    const textToSend = extractedText.length > maxChars
-      ? extractedText.substring(0, maxChars) + '\n\n[TEXT TRUNCATED - REMAINING CONTENT NOT INCLUDED]'
-      : extractedText;
+    let result;
+    let extractedText = '';
+    let pageCount = 1;
 
+    // Strategy 1: Try pdf-parse text extraction
+    try {
+      const pdfData = await pdfParse(req.file.buffer);
+      if (pdfData && pdfData.text && pdfData.text.trim().length >= 50) {
+        extractedText = pdfData.text;
+        pageCount = pdfData.numpages || 1;
+        console.log(`📝 Extracted ${extractedText.length} chars via pdf-parse (${pageCount} pages)`);
+      }
+    } catch (pdfErr) {
+      console.warn('⚠️ pdf-parse text extraction failed or skipped:', pdfErr.message);
+    }
+
+    // Strategy 2: Call Gemini AI
     console.log('🤖 Sending to Gemini AI for intelligent parsing...');
 
-    const result = await model.generateContent(PARSE_PROMPT + textToSend);
+    if (extractedText && extractedText.length >= 50) {
+      // Send extracted text to Gemini
+      const maxChars = 120000;
+      const textToSend = extractedText.length > maxChars
+        ? extractedText.substring(0, maxChars) + '\n\n[TRUNCATED]'
+        : extractedText;
+
+      result = await model.generateContent([PARSE_PROMPT, textToSend]);
+    } else {
+      // Fallback: Send PDF buffer directly to Gemini via native multimodal inlineData
+      console.log('📦 Falling back to native Gemini PDF binary parsing...');
+      const pdfPart = {
+        inlineData: {
+          data: req.file.buffer.toString('base64'),
+          mimeType: 'application/pdf',
+        },
+      };
+
+      result = await model.generateContent([PARSE_PROMPT, pdfPart]);
+    }
+
     const responseText = result.response.text();
 
-    // Step 3: Parse AI response JSON
+    // Parse AI response JSON
     let parsed;
     try {
-      // Try to extract JSON from the response (handle cases where AI wraps in markdown)
       let jsonStr = responseText;
-      
-      // Remove markdown code fences if present
       const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
       if (jsonMatch) {
         jsonStr = jsonMatch[1];
       }
-      
       parsed = JSON.parse(jsonStr.trim());
     } catch (parseErr) {
-      console.error('❌ Failed to parse Gemini AI response:', parseErr.message);
-      console.error('Raw response:', responseText.substring(0, 500));
+      console.error('❌ JSON parse error from AI response:', parseErr.message);
+      console.error('Raw AI response sample:', responseText.substring(0, 300));
       return res.status(500).json({
         success: false,
-        message: 'AI could not parse the PDF content into questions. Try a different PDF or check its format.',
+        message: 'AI processing completed, but response could not be formatted into questions. Please check PDF file formatting.',
       });
     }
 
     if (!parsed.questions || !Array.isArray(parsed.questions) || parsed.questions.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'No questions could be identified in the PDF. Please check the PDF contains properly formatted MCQ questions.',
+        message: 'No multiple-choice questions found in the PDF. Please ensure the PDF contains clear MCQ questions.',
       });
     }
 
     // Validate and clean up each question
-    const validQuestions = parsed.questions.filter(q => 
-      q.questionText && 
-      q.options && 
-      Array.isArray(q.options) && 
-      q.options.length >= 2
-    ).map((q, idx) => ({
-      questionNumber: idx + 1,
-      questionText: q.questionText.trim(),
-      options: q.options.map(opt => String(opt).trim()),
-      correctOption: typeof q.correctOption === 'number' && q.correctOption >= 0 && q.correctOption < q.options.length 
-        ? q.correctOption 
-        : 0,
-      subject: q.subject || parsed.suggestedSubject || 'General',
-      solution: q.solution || '',
-    }));
+    const validQuestions = parsed.questions
+      .filter(q => q.questionText && q.options && Array.isArray(q.options) && q.options.length >= 2)
+      .map((q, idx) => ({
+        questionNumber: idx + 1,
+        questionText: String(q.questionText).trim(),
+        options: q.options.map(opt => String(opt).trim()),
+        correctOption: typeof q.correctOption === 'number' && q.correctOption >= 0 && q.correctOption < q.options.length
+          ? q.correctOption
+          : 0,
+        subject: q.subject || parsed.suggestedSubject || 'General',
+        solution: q.solution || '',
+      }));
 
-    console.log(`✅ AI parsed ${validQuestions.length} valid questions from PDF`);
+    console.log(`✅ Successfully parsed ${validQuestions.length} questions from PDF`);
 
     res.json({
       success: true,
       message: `Successfully parsed ${validQuestions.length} questions from your PDF!`,
       data: {
         hasAnswerKey: parsed.hasAnswerKey !== false,
-        suggestedTitle: parsed.suggestedTitle || req.file.originalname.replace('.pdf', ''),
+        suggestedTitle: parsed.suggestedTitle || req.file.originalname.replace(/\.pdf$/i, ''),
         suggestedSubject: parsed.suggestedSubject || 'General',
-        totalPages: pdfData.numpages,
-        extractedTextLength: extractedText.length,
+        totalPages: pageCount,
         questions: validQuestions,
       },
     });
   } catch (err) {
-    console.error('❌ PDF Parse Error:', err.message);
+    console.error('❌ PDF Parse Handler Error:', err.message);
     res.status(500).json({ success: false, message: err.message || 'Failed to process PDF.' });
   }
 });
 
 // @route   POST /api/pdf/create-exam
-// @desc    Create exam + all questions from parsed PDF data
+// @desc    Create exam + questions from parsed PDF data
 router.post('/create-exam', verifyToken, verifyTeacherOrAdmin, async (req, res) => {
   try {
     const { title, subject, durationMinutes, defaultMarksPerQuestion, defaultNegativeMarks, questions } = req.body;
@@ -187,7 +187,6 @@ router.post('/create-exam', verifyToken, verifyTeacherOrAdmin, async (req, res) 
       });
     }
 
-    // Generate unique test code
     let testCode;
     for (let attempt = 0; attempt < 10; attempt++) {
       testCode = generateTestCode();
@@ -195,7 +194,6 @@ router.post('/create-exam', verifyToken, verifyTeacherOrAdmin, async (req, res) 
       if (!exists) break;
     }
 
-    // Create the exam
     const exam = await Exam.create({
       title,
       subject: subject || 'General',
@@ -207,7 +205,6 @@ router.post('/create-exam', verifyToken, verifyTeacherOrAdmin, async (req, res) 
       isPublished: false,
     });
 
-    // Create all questions
     const marksPerQ = Number(defaultMarksPerQuestion) || 4;
     const negMarks = Number(defaultNegativeMarks) || 1;
 
@@ -225,11 +222,10 @@ router.post('/create-exam', verifyToken, verifyTeacherOrAdmin, async (req, res) 
 
     await Question.insertMany(questionDocs);
 
-    // Update exam total marks
     exam.totalMarks = questions.length * marksPerQ;
     await exam.save();
 
-    console.log(`✅ Created exam "${title}" with ${questions.length} questions from PDF (Code: ${testCode})`);
+    console.log(`✅ Exam "${title}" created with ${questions.length} questions (Code: ${testCode})`);
 
     res.status(201).json({
       success: true,
@@ -240,7 +236,7 @@ router.post('/create-exam', verifyToken, verifyTeacherOrAdmin, async (req, res) 
       },
     });
   } catch (err) {
-    console.error('❌ Create Exam from PDF Error:', err.message);
+    console.error('❌ Create Exam Error:', err.message);
     res.status(500).json({ success: false, message: err.message || 'Failed to create exam.' });
   }
 });
