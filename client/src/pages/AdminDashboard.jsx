@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
-import { BookOpen, Plus, Users, BarChart2, Printer, Eye, Trash2, Edit3, CheckCircle, XCircle, Sparkles, FileText } from 'lucide-react';
+import { BookOpen, Plus, Users, BarChart2, Printer, Eye, Trash2, Edit3, CheckCircle, XCircle, Sparkles, FileText, Copy, Share2 } from 'lucide-react';
 
 const AdminDashboard = () => {
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [copiedId, setCopiedId] = useState(null);
 
   // New Exam Form State
   const [formData, setFormData] = useState({
@@ -180,6 +181,26 @@ const AdminDashboard = () => {
                       {exam.isPublished ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
                       {exam.isPublished ? 'Published' : 'Draft'}
                     </span>
+                    {exam.testCode && (
+                      <span className="px-2.5 py-0.5 rounded text-[11px] font-mono font-bold bg-cyan-500/10 text-cyan-300 border border-cyan-500/25 flex items-center gap-1.5">
+                        📋 {exam.testCode}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigator.clipboard.writeText(exam.testCode);
+                            setCopiedId(exam._id);
+                            setTimeout(() => setCopiedId(null), 2000);
+                          }}
+                          className="ml-0.5 p-0.5 rounded hover:bg-cyan-500/20 transition-colors"
+                          title="Copy test code"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
+                        {copiedId === exam._id && (
+                          <span className="text-[9px] text-emerald-400 font-semibold">Copied!</span>
+                        )}
+                      </span>
+                    )}
                   </div>
 
                   <h3 className="text-lg font-bold text-white">{exam.title}</h3>

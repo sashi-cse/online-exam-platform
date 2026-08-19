@@ -105,24 +105,25 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
-// Start Server
-const startServer = async () => {
-  await connectDB();
+// Start Server — bind port FIRST so Render sees the service as alive, then connect DB
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Online Exam API Server running on port ${PORT}`);
 
-  // Auto-seed if database has no users
-  try {
-    const userCount = await User.countDocuments();
-    if (userCount === 0) {
-      console.log('🌱 No users found in database. Auto-running initial seed script...');
-      await seedData();
-    }
-  } catch (seedErr) {
-    console.warn('⚠️ User check / auto-seed skipped:', seedErr.message);
-  }
-
-  app.listen(PORT, () => {
-    console.log(`🚀 Online Exam API Server running on port ${PORT}`);
-  });
-};
-
-startServer();
+  // Connect to database in the background (non-blocking for port binding)
+  connectDB()
+    .then(async () => {
+      // Auto-seed if database has no users
+      try {
+        const userCount = await User.countDocuments();
+        if (userCount === 0) {
+          console.log('🌱 No users found in database. Auto-running initial seed script...');
+          await seedData();
+        }
+      } catch (seedErr) {
+        console.warn('⚠️ User check / auto-seed skipped:', seedErr.message);
+      }
+    })
+    .catch((err) => {
+      console.error('❌ Database connection failed:', err.message);
+    });
+});

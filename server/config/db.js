@@ -4,23 +4,19 @@ const connectDB = async () => {
   const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI;
 
   if (mongoUri) {
-    try {
-      console.log(`Connecting to MongoDB Atlas / Database...`);
-      await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 8000 });
-      console.log('✅ Successfully connected to MongoDB database.');
-      return;
-    } catch (err) {
-      console.error('⚠️ Could not connect to primary MONGODB_URI:', err.message);
-    }
+    // Production: only try the configured URI
+    console.log('Connecting to MongoDB Atlas / Database...');
+    await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 15000 });
+    console.log('✅ Successfully connected to MongoDB database.');
+    return;
   }
 
-  // Fallback to local daemon or In-Memory MongoDB Server
+  // Development fallback: try local, then in-memory
   try {
-    const localUri = mongoUri || 'mongodb://localhost:27017/online_exam_db';
-    await mongoose.connect(localUri, { serverSelectionTimeoutMS: 2000 });
+    await mongoose.connect('mongodb://localhost:27017/online_exam_db', { serverSelectionTimeoutMS: 3000 });
     console.log('✅ Connected to local MongoDB database.');
   } catch (err) {
-    console.warn('⚠️ Primary MongoDB not reachable. Launching In-Memory MongoDB Server...');
+    console.warn('⚠️ Local MongoDB not reachable. Launching In-Memory MongoDB Server...');
     try {
       const { MongoMemoryServer } = require('mongodb-memory-server');
       const mongod = await MongoMemoryServer.create();
@@ -34,3 +30,4 @@ const connectDB = async () => {
 };
 
 module.exports = connectDB;
+

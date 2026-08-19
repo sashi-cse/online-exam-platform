@@ -1,5 +1,23 @@
 const mongoose = require('mongoose');
 
+/**
+ * Generate a random test code in the format XXXX-XXXX
+ * (4 uppercase alphanumeric chars, hyphen, 4 uppercase alphanumeric chars)
+ * Example outputs: EXAM-7X3K, TE9B-2MQW
+ */
+function generateTestCode() {
+  const pool = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let code = '';
+  for (let i = 0; i < 4; i++) {
+    code += pool.charAt(Math.floor(Math.random() * pool.length));
+  }
+  code += '-';
+  for (let i = 0; i < 4; i++) {
+    code += pool.charAt(Math.floor(Math.random() * pool.length));
+  }
+  return code;
+}
+
 const ExamSchema = new mongoose.Schema(
   {
     title: {
@@ -10,6 +28,13 @@ const ExamSchema = new mongoose.Schema(
     description: {
       type: String,
       default: '',
+    },
+    testCode: {
+      type: String,
+      unique: true,
+      uppercase: true,
+      sparse: true,
+      trim: true,
     },
     bookletCode: {
       type: String,
@@ -67,4 +92,7 @@ const ExamSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model('Exam', ExamSchema);
+const Exam = mongoose.model('Exam', ExamSchema);
+
+module.exports = Exam;
+module.exports.generateTestCode = generateTestCode;

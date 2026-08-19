@@ -2,12 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
-import { BookOpen, Clock, Award, Play, CheckCircle2, ShieldAlert, Sparkles, HelpCircle, RotateCcw } from 'lucide-react';
+import { BookOpen, Clock, Award, Play, CheckCircle2, ShieldAlert, Sparkles, HelpCircle, RotateCcw, KeyRound, ArrowRight, AlertCircle } from 'lucide-react';
 
 const StudentDashboard = () => {
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [resettingId, setResettingId] = useState(null);
+  const [testCode, setTestCode] = useState('');
+  const [joinLoading, setJoinLoading] = useState(false);
+  const [joinError, setJoinError] = useState('');
+  const [joinSuccess, setJoinSuccess] = useState('');
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -50,6 +54,31 @@ const StudentDashboard = () => {
     }
   };
 
+  const handleJoinTest = async () => {
+    const code = testCode.trim().toUpperCase();
+    if (!code) {
+      setJoinError('Please enter a test code.');
+      return;
+    }
+    setJoinError('');
+    setJoinSuccess('');
+    setJoinLoading(true);
+    try {
+      const res = await api.get('/exams/join/' + code);
+      if (res.data.success) {
+        const exam = res.data.exam;
+        setJoinSuccess('Test found! Redirecting...');
+        setTimeout(() => {
+          navigate(`/exam/take/${exam._id}`);
+        }, 600);
+      }
+    } catch (err) {
+      setJoinError(err.response?.data?.message || 'Invalid test code. Please check and try again.');
+    } finally {
+      setJoinLoading(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* Welcome Banner */}
@@ -63,19 +92,87 @@ const StudentDashboard = () => {
             Welcome back, {user?.name}!
           </h1>
           <p className="mt-2 text-sm text-slate-300 leading-relaxed">
-            Access your assigned test papers, view real-time countdown timers, take proctored assessments, and review detailed worked solutions.
+            Join tests using a code from your teacher, view your past attempts, and review detailed worked solutions.
           </p>
         </div>
       </div>
 
-      {/* Available Exams Section */}
+      {/* Join Test Card */}
+      <div className="relative rounded-2xl bg-slate-900 border border-cyan-500/30 p-6 sm:p-8 shadow-2xl shadow-cyan-500/5 overflow-hidden">
+        {/* Glow effect */}
+        <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-cyan-500/5 via-blue-500/5 to-indigo-500/5 pointer-events-none"></div>
+        <div className="absolute -top-24 -right-24 w-48 h-48 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div className="relative z-10">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+              <KeyRound className="w-5 h-5 text-cyan-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-white">Join a Test</h2>
+              <p className="text-xs text-slate-400">Enter the test code shared by your teacher</p>
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 max-w-lg">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={testCode}
+                onChange={(e) => {
+                  setTestCode(e.target.value.toUpperCase());
+                  setJoinError('');
+                  setJoinSuccess('');
+                }}
+                onKeyDown={(e) => e.key === 'Enter' && handleJoinTest()}
+                placeholder="EXAM-XXXX"
+                maxLength={20}
+                className="w-full px-5 py-3.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-center text-lg font-mono font-bold tracking-widest uppercase placeholder:text-slate-600 placeholder:tracking-widest focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
+              />
+            </div>
+            <button
+              onClick={handleJoinTest}
+              disabled={joinLoading || !testCode.trim()}
+              className="px-6 py-3.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-500 text-white font-semibold rounded-xl text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-cyan-500/20 disabled:shadow-none shrink-0"
+            >
+              {joinLoading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  Joining...
+                </>
+              ) : (
+                <>
+                  <ArrowRight className="w-4 h-4" />
+                  Join Test
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Error / Success Messages */}
+          {joinError && (
+            <div className="mt-3 flex items-center gap-2 text-sm text-rose-400">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{joinError}</span>
+            </div>
+          )}
+          {joinSuccess && (
+            <div className="mt-3 flex items-center gap-2 text-sm text-emerald-400">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{joinSuccess}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* My Tests Section */}
       <div>
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <BookOpen className="w-5 h-5 text-blue-400" /> Available Tests & Exams
+            <BookOpen className="w-5 h-5 text-blue-400" /> My Tests
           </h2>
           <span className="text-xs text-slate-400 bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700 font-medium">
-            {exams.length} Test{exams.length !== 1 ? 's' : ''} Available
+            {exams.length} Test{exams.length !== 1 ? 's' : ''}
           </span>
         </div>
 
@@ -92,8 +189,8 @@ const StudentDashboard = () => {
         ) : exams.length === 0 ? (
           <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-12 text-center max-w-md mx-auto">
             <BookOpen className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-            <h3 className="text-lg font-semibold text-white">No Exams Currently Published</h3>
-            <p className="text-xs text-slate-400 mt-1">Check back soon when your teacher publishes new test papers.</p>
+            <h3 className="text-lg font-semibold text-white">No tests taken yet</h3>
+            <p className="text-xs text-slate-400 mt-1">Enter a test code above to get started!</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

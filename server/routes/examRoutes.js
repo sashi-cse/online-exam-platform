@@ -1,5 +1,6 @@
 const express = require('express');
 const Exam = require('../models/Exam');
+const { generateTestCode } = require('../models/Exam');
 const Question = require('../models/Question');
 const Result = require('../models/Result');
 const { verifyToken, verifyTeacherOrAdmin } = require('../middleware/auth');
@@ -24,7 +25,10 @@ router.get('/', verifyToken, async (req, res) => {
     } else if (req.user.role === 'teacher') {
       exams = await Exam.find({ createdBy: req.user._id }).sort({ createdAt: -1 });
     } else {
-      exams = await Exam.find({ isPublished: true }).sort({ createdAt: -1 });
+      // Students only see exams they have previously attempted (joined via test code)
+      const studentResults = await Result.find({ studentId: req.user._id }).select('examId');
+      const attemptedExamIds = studentResults.map((r) => r.examId);
+      exams = await Exam.find({ _id: { $in: attemptedExamIds }, isPublished: true }).sort({ createdAt: -1 });
     }
 
     const examDataList = await Promise.all(
@@ -58,6 +62,44 @@ router.get('/', verifyToken, async (req, res) => {
     );
 
     res.json({ success: true, exams: examDataList });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// @route   GET /api/exams/join/:testCode
+// @desc    Join / find an exam by its unique test code
+router.get('/join/:testCode', verifyToken, async (req, res) => {
+  try {
+    const code = req.params.testCode.toUpperCase().trim();
+    const exam = await Exam.findOne({ testCode: code });
+
+    if (!exam || !exam.isPublished) {
+      return res.status(404).json({ success: false, message: 'No published exam found with that test code.' });
+    }
+
+    const questionCount = await Question.countDocuments({ examId: exam._id });
+    const userAttempt = await Result.findOne({
+      examId: exam._id,
+      studentId: req.user._id,
+    });
+
+    res.json({
+      success: true,
+      exam: {
+        ...exam.toObject(),
+        questionCount,
+        userAttempt: userAttempt
+          ? {
+              id: userAttempt._id,
+              status: userAttempt.status,
+              score: userAttempt.score,
+              totalMarks: userAttempt.totalMarks,
+              submittedAt: userAttempt.submittedAt,
+            }
+          : null,
+      },
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -131,9 +173,25 @@ router.post('/', verifyToken, verifyTeacherOrAdmin, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Exam title and duration are required.' });
     }
 
+    // Generate a unique test code with retry on collision
+    let testCode;
+    const MAX_RETRIES = 10;
+    for (let i = 0; i < MAX_RETRIES; i++) {
+      const candidate = generateTestCode();
+      const exists = await Exam.findOne({ testCode: candidate });
+      if (!exists) {
+        testCode = candidate;
+        break;
+      }
+    }
+    if (!testCode) {
+      return res.status(500).json({ success: false, message: 'Failed to generate a unique test code. Please try again.' });
+    }
+
     const exam = await Exam.create({
       title,
       description,
+      testCode,
       bookletCode: bookletCode || 'NEET-CODE-A',
       subject: subject || 'General',
       durationMinutes: Number(durationMinutes),

@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import api from '../utils/api';
 import MathRenderer from '../components/MathRenderer';
 import QuestionBuilder from './QuestionBuilder';
-import { ArrowLeft, Plus, Edit2, Trash2, Printer, CheckCircle, HelpCircle, BookOpen, Layers } from 'lucide-react';
+import { ArrowLeft, Plus, Edit2, Trash2, Printer, CheckCircle, HelpCircle, BookOpen, Layers, Copy } from 'lucide-react';
 
 const ExamManage = () => {
   const { id } = useParams();
@@ -12,6 +12,7 @@ const ExamManage = () => {
   const [loading, setLoading] = useState(true);
   const [showQuestionModal, setShowQuestionModal] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState(null);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   useEffect(() => {
     fetchExamAndQuestions();
@@ -92,7 +93,7 @@ const ExamManage = () => {
 
       {/* Exam Details Pill */}
       {exam && (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 grid grid-cols-2 sm:grid-cols-5 gap-4 text-xs">
           <div>
             <span className="text-slate-400 block">Subject / Stream</span>
             <span className="font-bold text-white text-sm">{exam.subject}</span>
@@ -108,6 +109,28 @@ const ExamManage = () => {
           <div>
             <span className="text-slate-400 block">Total Exam Marks</span>
             <span className="font-bold text-emerald-400 text-sm">{exam.totalMarks} Marks</span>
+          </div>
+          <div>
+            <span className="text-slate-400 block">Test Code (Share with Students)</span>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="font-mono text-cyan-300 font-bold text-sm">{exam.testCode || 'N/A'}</span>
+              {exam.testCode && (
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(exam.testCode);
+                    setCopiedCode(true);
+                    setTimeout(() => setCopiedCode(false), 2000);
+                  }}
+                  className="p-1 rounded-md bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 transition-colors"
+                  title="Copy test code"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {copiedCode && (
+                <span className="text-[10px] text-emerald-400 font-semibold">Copied!</span>
+              )}
+            </div>
           </div>
         </div>
       )}
