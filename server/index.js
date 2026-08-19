@@ -12,6 +12,7 @@ const questionRoutes = require('./routes/questionRoutes');
 const resultRoutes = require('./routes/resultRoutes');
 const bookletRoutes = require('./routes/bookletRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const pdfRoutes = require('./routes/pdfRoutes');
 const seedData = require('./utils/seed');
 const User = require('./models/User');
 
@@ -43,6 +44,7 @@ app.use('/api/questions', questionRoutes);
 app.use('/api/results', resultRoutes);
 app.use('/api/booklet', bookletRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/pdf', pdfRoutes);
 
 // Locate frontend build directory across potential deployment directory structures
 const possibleDistPaths = [

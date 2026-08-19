@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
-import { BookOpen, Plus, Users, BarChart2, Printer, Eye, Trash2, Edit3, CheckCircle, XCircle, Sparkles, FileText, Copy, Share2 } from 'lucide-react';
+import PdfUpload from './PdfUpload';
+import { BookOpen, Plus, Users, BarChart2, Printer, Eye, Trash2, Edit3, CheckCircle, XCircle, Sparkles, FileText, Copy, Share2, Upload } from 'lucide-react';
 
 const AdminDashboard = () => {
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showPdfUpload, setShowPdfUpload] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
 
   // New Exam Form State
@@ -103,12 +105,20 @@ const AdminDashboard = () => {
           <p className="text-sm text-slate-400 mt-1">Create test papers, manage LaTeX questions, export NEET-style printable booklets, and view student marks.</p>
         </div>
 
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold rounded-xl text-sm shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2 transition-all shrink-0"
-        >
-          <Plus className="w-5 h-5" /> Create New Exam
-        </button>
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={() => setShowPdfUpload(true)}
+            className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-semibold rounded-xl text-sm shadow-lg shadow-purple-500/25 flex items-center justify-center gap-2 transition-all"
+          >
+            <Upload className="w-5 h-5" /> Upload PDF
+          </button>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold rounded-xl text-sm shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2 transition-all"
+          >
+            <Plus className="w-5 h-5" /> Create New Exam
+          </button>
+        </div>
       </div>
 
       {/* Stats Summary */}
@@ -390,6 +400,18 @@ const AdminDashboard = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* PDF Upload Modal */}
+      {showPdfUpload && (
+        <PdfUpload
+          onClose={() => setShowPdfUpload(false)}
+          onExamCreated={(exam) => {
+            setShowPdfUpload(false);
+            fetchExams();
+            navigate(`/admin/exam/${exam._id}`);
+          }}
+        />
       )}
     </div>
   );
