@@ -39,14 +39,82 @@ async function extractPdfText(buffer) {
   return { text: '', pages: 1 };
 }
 
+// Helper: Universal normalize correct option (maps 'A','B','C','D', '(A)', 1, '1', 0, etc. to 0-3 index)
+function normalizeCorrectOption(val, options = []) {
+  if (val === undefined || val === null) return 0;
+
+  // 1. Direct number check
+  if (typeof val === 'number') {
+    if (val >= 0 && val <= 3) return val;
+    if (val >= 1 && val <= 4) return val - 1; // 1-indexed number
+  }
+
+  const str = String(val).trim();
+
+  // 2. Direct letter match: A, B, C, D or (A), (B), (C), (D) or Option A or Opt B
+  const letterMatch = str.match(/(?:Option|Opt)?\s*\(?([A-D])\)?/i);
+  if (letterMatch) {
+    const l = letterMatch[1].toUpperCase();
+    return l === 'A' ? 0 : l === 'B' ? 1 : l === 'C' ? 2 : 3;
+  }
+
+  // 3. String digits 0-3 (0-indexed)
+  if (/^[0-3]$/.test(str)) return parseInt(str, 10);
+  // 4. String digits 1-4 (1-indexed)
+  if (/^[1-4]$/.test(str)) return parseInt(str, 10) - 1;
+
+  // 5. Match text against options array if provided
+  if (Array.isArray(options) && options.length > 0) {
+    const cleanedStr = str.toLowerCase();
+    for (let i = 0; i < options.length; i++) {
+      if (options[i] && (options[i].toLowerCase() === cleanedStr || options[i].toLowerCase().includes(cleanedStr))) {
+        return i;
+      }
+    }
+  }
+
+  return 0;
+}
+
+// Helper: Extract Document-Level Answer Key Map (e.g., "1. B  2. C  3. A" or "116. A 117. B" or "1. (B)")
+function extractAnswerKeyMap(text) {
+  const map = {};
+  if (!text) return map;
+
+  const patterns = [
+    /(?:^|\s)(?:Q\.?)?(\d{1,3})[\.\)\:\-]?\s*\(?([A-D])\)?(?=\s|\n|,|\;|$)/gi,
+    /(?:^|\s)(?:Q\.?)?(\d{1,3})[\.\)\:\-]?\s*\(?([1-4])\)?(?=\s|\n|,|\;|$)/gi
+  ];
+
+  for (const regex of patterns) {
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      const qNum = parseInt(match[1]);
+      const rawVal = match[2];
+      const idx = normalizeCorrectOption(rawVal);
+      if (qNum > 0 && qNum <= 300) {
+        if (map[qNum] === undefined || /[A-D]/i.test(rawVal)) {
+          map[qNum] = idx;
+        }
+      }
+    }
+  }
+  return map;
+}
+
 // Helper 2: Fast & 100% Reliable Regex Question Parser (No API Key Required!)
 function parseQuestionsWithRegex(text) {
-  if (!text || text.length < 50) return [];
+  if (!text || text.length < 50) return { questions: [], hasAnswerKey: false };
 
   // Normalize line breaks
   const normalized = text.replace(/\r\n/g, '\n');
+
+  // Extract document-wide answer key map if present at end or section of PDF
+  const docAnswerKeyMap = extractAnswerKeyMap(normalized);
+
   const blocks = normalized.split(/\n(?=\d+[\.\)]\s+)/);
   const questions = [];
+  let foundAnyAnswerKey = Object.keys(docAnswerKeyMap).length > 0;
 
   for (const block of blocks) {
     const trimmed = block.trim();
@@ -67,14 +135,18 @@ function parseQuestionsWithRegex(text) {
 
     if (optA && optB && optC && optD) {
       let correctOpt = 0;
-      const ansMatch = trimmed.match(/(?:Answer|Ans):\s*\(?([A-D])\)?/i);
-      if (ansMatch) {
-        const letter = ansMatch[1].toUpperCase();
-        correctOpt = letter === 'A' ? 0 : letter === 'B' ? 1 : letter === 'C' ? 2 : 3;
+
+      // Check inline answer pattern in block
+      const inlineAns = trimmed.match(/(?:Answer|Ans|Correct|Option)[\s\:\-\=]*\(?([A-D1-4])\)?/i);
+      if (inlineAns) {
+        correctOpt = normalizeCorrectOption(inlineAns[1]);
+        foundAnyAnswerKey = true;
+      } else if (docAnswerKeyMap[qNum] !== undefined) {
+        correctOpt = docAnswerKeyMap[qNum];
       }
 
       let solution = '';
-      const solMatch = trimmed.match(/(?:Answer|Ans):\s*\(?[A-D]\)?\s*[^\n]*\n([\s\S]+?)(?=\nNCERT|\nTopic:|\n\d+[\.\)]|$)/i);
+      const solMatch = trimmed.match(/(?:Answer|Ans):\s*\(?[A-D1-4]\)?\s*[^\n]*\n([\s\S]+?)(?=\nNCERT|\nTopic:|\n\d+[\.\)]|$)/i);
       if (solMatch) {
         solution = solMatch[1].trim();
       }
@@ -97,7 +169,7 @@ function parseQuestionsWithRegex(text) {
     }
   }
 
-  return questions;
+  return { questions, hasAnswerKey: foundAnyAnswerKey };
 }
 
 // Helper 3: Direct REST API call to Google Gemini (Bypasses SDK version issues)
@@ -177,7 +249,7 @@ RULES:
 2. Each question must have:
    - questionText: String
    - options: Array of 4 strings [A, B, C, D]
-   - correctOption: 0-indexed integer (0 for A, 1 for B, 2 for C, 3 for D)
+   - correctOption: 0-indexed integer (0 for A, 1 for B, 2 for C, 3 for D). IMPORTANT: Carefully extract the correct answer key from the document for each question (0=A, 1=B, 2=C, 3=D). Do NOT default all to 0!
    - subject: Subject string (e.g. Physics, Chemistry, Botany, Zoology, General)
    - solution: Explanation string if available, otherwise ""
 3. Return ONLY a valid JSON object matching this exact format:
@@ -211,14 +283,14 @@ router.post('/parse', verifyToken, verifyTeacherOrAdmin, upload.single('pdf'), a
 
     // Tier 2: Try 100% reliable local Regex Question Parser first
     if (extractedText && extractedText.length > 100) {
-      const regexQuestions = parseQuestionsWithRegex(extractedText);
+      const { questions: regexQuestions, hasAnswerKey } = parseQuestionsWithRegex(extractedText);
       if (regexQuestions && regexQuestions.length >= 3) {
-        console.log(`⚡ Instant Regex Parser extracted ${regexQuestions.length} questions from PDF!`);
+        console.log(`⚡ Instant Regex Parser extracted ${regexQuestions.length} questions from PDF! (Has Answer Key: ${hasAnswerKey})`);
         return res.json({
           success: true,
           message: `Successfully parsed ${regexQuestions.length} questions from your PDF!`,
           data: {
-            hasAnswerKey: true,
+            hasAnswerKey,
             suggestedTitle: req.file.originalname.replace(/\.pdf$/i, '').replace(/_/g, ' '),
             suggestedSubject: regexQuestions[0]?.subject || 'General',
             totalPages: pageCount,
@@ -268,24 +340,28 @@ router.post('/parse', verifyToken, verifyTeacherOrAdmin, upload.single('pdf'), a
 
     const validQuestions = parsed.questions
       .filter(q => q.questionText && q.options && Array.isArray(q.options) && q.options.length >= 2)
-      .map((q, idx) => ({
-        questionNumber: idx + 1,
-        questionText: String(q.questionText).trim(),
-        options: q.options.map(opt => String(opt).trim()),
-        correctOption: typeof q.correctOption === 'number' && q.correctOption >= 0 && q.correctOption < q.options.length
-          ? q.correctOption
-          : 0,
-        subject: q.subject || parsed.suggestedSubject || 'General',
-        solution: q.solution || '',
-      }));
+      .map((q, idx) => {
+        const rawAns = q.correctOption !== undefined ? q.correctOption : q.correctAnswer || q.answer;
+        const normOpt = normalizeCorrectOption(rawAns, q.options);
+        return {
+          questionNumber: idx + 1,
+          questionText: String(q.questionText).trim(),
+          options: q.options.map(opt => String(opt).trim()),
+          correctOption: normOpt,
+          subject: q.subject || parsed.suggestedSubject || 'General',
+          solution: q.solution || '',
+        };
+      });
 
     console.log(`✅ AI successfully parsed ${validQuestions.length} questions from PDF`);
+
+    const hasAnswerKey = parsed.hasAnswerKey !== false && (validQuestions.some(q => q.correctOption > 0) || validQuestions.length < 5);
 
     res.json({
       success: true,
       message: `Successfully parsed ${validQuestions.length} questions from your PDF!`,
       data: {
-        hasAnswerKey: parsed.hasAnswerKey !== false,
+        hasAnswerKey,
         suggestedTitle: parsed.suggestedTitle || req.file.originalname.replace(/\.pdf$/i, ''),
         suggestedSubject: parsed.suggestedSubject || 'General',
         totalPages: pageCount,
