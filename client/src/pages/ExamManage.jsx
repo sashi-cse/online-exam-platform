@@ -228,6 +228,18 @@ const ExamManage = () => {
         )}
       </div>
 
+      {/* Done Button at the bottom */}
+      {!loading && questions.length > 0 && (
+        <div className="pt-6 pb-4 border-t border-slate-800/80 flex justify-center items-center">
+          <Link
+            to="/admin"
+            className="px-8 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-2xl text-sm shadow-xl shadow-emerald-500/20 flex items-center gap-2.5 transition-all hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <CheckCircle className="w-5 h-5 text-white" /> Done (Return to Dashboard)
+          </Link>
+        </div>
+      )}
+
       {/* Question Builder Modal */}
       {showQuestionModal && (
         <QuestionBuilder
