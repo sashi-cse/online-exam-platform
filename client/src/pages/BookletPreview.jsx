@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../utils/api';
 import MathRenderer from '../components/MathRenderer';
+import { useTheme } from '../context/ThemeContext';
 import { Printer, ArrowLeft, CheckCircle2, FileText, Sparkles, Layers } from 'lucide-react';
 
 const BookletPreview = () => {
+  const { isDark } = useTheme();
   const { examId } = useParams();
-  const [data, setData] = useState(null);
+    const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [exportMode, setExportMode] = useState('full'); // 'full', 'answer_key', 'solutions'
 
@@ -34,7 +36,7 @@ const BookletPreview = () => {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-screen bg-slate-950 text-white">
+      <div className={`flex justify-center items-center h-screen ${isDark ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-900'}`}>
         <div className="flex flex-col items-center gap-3">
           <div className="w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
           <p className="text-sm font-medium">Generating NEET Test Booklet & Layout...</p>
@@ -45,9 +47,11 @@ const BookletPreview = () => {
 
   if (!data) {
     return (
-      <div className="max-w-md mx-auto my-20 p-8 bg-slate-900 border border-slate-800 rounded-2xl text-center">
-        <p className="text-rose-400 font-semibold">Booklet data not available.</p>
-        <Link to="/admin" className="mt-4 inline-block px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-xl">
+      <div className={`max-w-md mx-auto my-20 p-8 border rounded-3xl text-center ${
+        isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900 shadow-xl'
+      }`}>
+        <p className="text-rose-500 font-semibold">Booklet data not available.</p>
+        <Link to="/admin" className="mt-4 inline-block px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-xl shadow">
           Back to Admin Console
         </Link>
       </div>
@@ -57,45 +61,53 @@ const BookletPreview = () => {
   const { exam, subjects, allQuestions, answerKey } = data;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-900 font-sans pb-16">
+    <div className={`min-h-screen font-sans pb-16 transition-colors duration-300 ${
+      isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'
+    }`}>
       
       {/* Top Floating Controls Bar (Hidden during Print) */}
-      <div className="no-print bg-slate-900/90 backdrop-blur-md border-b border-slate-800 sticky top-0 z-40 px-6 py-4 flex items-center justify-between text-white">
+      <div className={`no-print border-b sticky top-0 z-40 px-6 py-4 flex items-center justify-between transition-colors duration-300 ${
+        isDark ? 'bg-slate-900/90 border-slate-800 text-white backdrop-blur-md' : 'bg-white/90 border-slate-200 text-slate-900 backdrop-blur-md shadow-md'
+      }`}>
         <div className="flex items-center gap-3">
           <Link
             to={`/admin/exam/${examId}`}
-            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors border border-slate-700"
+            className={`p-2.5 rounded-xl transition-colors border ${
+              isDark ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+            }`}
           >
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div>
-            <span className="text-xs text-amber-400 font-semibold uppercase tracking-wider">NEET/JEE Printable Booklet Engine</span>
-            <h1 className="text-lg font-bold text-white">{exam.title}</h1>
+            <span className="text-xs text-amber-500 font-bold uppercase tracking-wider">NEET/JEE Printable Booklet Engine</span>
+            <h1 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{exam.title}</h1>
           </div>
         </div>
 
         {/* Export Mode Toggles */}
-        <div className="flex items-center gap-2 bg-slate-800/90 p-1 rounded-xl border border-slate-700">
+        <div className={`flex items-center gap-2 p-1 rounded-xl border ${
+          isDark ? 'bg-slate-800/90 border-slate-700' : 'bg-slate-100 border-slate-200'
+        }`}>
           <button
             onClick={() => setExportMode('full')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              exportMode === 'full' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-300 hover:text-white'
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              exportMode === 'full' ? 'bg-amber-500 text-slate-950 shadow' : isDark ? 'text-slate-300 hover:text-white' : 'text-slate-700 hover:text-slate-900'
             }`}
           >
             Full Test Booklet
           </button>
           <button
             onClick={() => setExportMode('answer_key')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              exportMode === 'answer_key' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-300 hover:text-white'
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              exportMode === 'answer_key' ? 'bg-amber-500 text-slate-950 shadow' : isDark ? 'text-slate-300 hover:text-white' : 'text-slate-700 hover:text-slate-900'
             }`}
           >
             Answer Key Only
           </button>
           <button
             onClick={() => setExportMode('solutions')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              exportMode === 'solutions' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-300 hover:text-white'
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              exportMode === 'solutions' ? 'bg-amber-500 text-slate-950 shadow' : isDark ? 'text-slate-300 hover:text-white' : 'text-slate-700 hover:text-slate-900'
             }`}
           >
             Hints & Solutions

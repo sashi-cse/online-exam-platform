@@ -2,12 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import MathRenderer from '../components/MathRenderer';
+import { useTheme } from '../context/ThemeContext';
 import { Clock, ShieldAlert, Flag, ChevronLeft, ChevronRight, Maximize2, Send, AlertTriangle } from 'lucide-react';
 
 const ExamTaking = () => {
+  const { isDark } = useTheme();
   const { examId } = useParams();
   const navigate = useNavigate();
-
+  
   const [exam, setExam] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [resultId, setResultId] = useState(null);
@@ -257,7 +259,7 @@ const ExamTaking = () => {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-screen bg-slate-950 text-white">
+      <div className={`flex justify-center items-center h-screen ${isDark ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-900'}`}>
         <div className="flex flex-col items-center gap-3">
           <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
           <p className="text-sm font-medium">Loading Exam Session & Security Rules...</p>
@@ -270,23 +272,27 @@ const ExamTaking = () => {
   const currentState = userAnswers[currentQ?._id] || {};
 
   return (
-    <div className="h-screen bg-slate-950 text-slate-100 flex flex-col select-none overflow-hidden">
+    <div className={`h-screen flex flex-col select-none overflow-hidden transition-colors duration-300 ${
+      isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'
+    }`}>
       
       {/* Fullscreen Prompt Overlay */}
       {!hasStartedFullscreen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-md">
-          <div className="bg-slate-900 border border-slate-800 p-8 rounded-2xl max-w-lg w-full text-center space-y-5 shadow-2xl">
-            <div className="w-16 h-16 bg-blue-500/10 text-blue-400 rounded-2xl flex items-center justify-center mx-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
+          <div className={`border p-8 rounded-3xl max-w-lg w-full text-center space-y-5 shadow-2xl transition-colors duration-300 ${
+            isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
+          }`}>
+            <div className="w-16 h-16 bg-blue-500/10 text-blue-500 rounded-2xl flex items-center justify-center mx-auto">
               <Maximize2 className="w-8 h-8" />
             </div>
-            <h2 className="text-2xl font-extrabold text-white">Enter Distraction-Free Exam Mode</h2>
-            <p className="text-xs text-slate-300 leading-relaxed">
+            <h2 className={`text-2xl font-extrabold ${isDark ? 'text-white' : 'text-slate-900'}`}>Enter Distraction-Free Exam Mode</h2>
+            <p className="text-xs text-slate-400 leading-relaxed">
               To ensure test integrity, please enter full-screen mode. Do not switch tabs or exit during the test duration.
             </p>
 
             <button
               onClick={enterFullscreen}
-              className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold rounded-xl text-sm shadow-lg shadow-blue-500/25 transition-all"
+              className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold rounded-2xl text-sm shadow-lg shadow-blue-500/25 transition-all"
             >
               Start Exam Full Screen
             </button>
@@ -294,16 +300,18 @@ const ExamTaking = () => {
         </div>
       )}
 
-      {/* Top Header Bar with Prominent Mobile & Desktop Submit Button */}
-      <header className="h-14 bg-slate-900 border-b border-slate-800 px-3 sm:px-6 flex items-center justify-between shrink-0 z-30">
+      {/* Top Header Bar */}
+      <header className={`h-14 border-b px-3 sm:px-6 flex items-center justify-between shrink-0 z-30 transition-colors duration-300 ${
+        isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900 shadow-sm'
+      }`}>
         <div className="truncate max-w-[150px] sm:max-w-none">
-          <h1 className="font-extrabold text-xs sm:text-base text-white truncate">{exam?.title}</h1>
+          <h1 className={`font-extrabold text-xs sm:text-base truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{exam?.title}</h1>
           <p className="text-[10px] sm:text-xs text-slate-400 font-mono">Code: {exam?.bookletCode}</p>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">
           {tabSwitchCount > 0 && (
-            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-lg text-xs font-semibold">
+            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-lg text-xs font-semibold">
               <ShieldAlert className="w-3.5 h-3.5" />
               <span>{tabSwitchCount} Warning{tabSwitchCount > 1 ? 's' : ''}</span>
             </div>
@@ -312,14 +320,14 @@ const ExamTaking = () => {
           {/* Countdown Timer */}
           <div className={`flex items-center gap-1.5 px-2.5 sm:px-4 py-1.5 rounded-xl border font-mono font-bold text-xs sm:text-base ${
             timeLeftSeconds < 300
-              ? 'bg-rose-500/10 border-rose-500/30 text-rose-400 animate-pulse'
-              : 'bg-slate-800 border-slate-700 text-emerald-400'
+              ? 'bg-rose-500/10 border-rose-500/30 text-rose-500 animate-pulse'
+              : isDark ? 'bg-slate-800 border-slate-700 text-emerald-400' : 'bg-slate-100 border-slate-200 text-emerald-600'
           }`}>
             <Clock className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
             <span>{formatTimer(timeLeftSeconds)}</span>
           </div>
 
-          {/* Top Header Submit Test Button (Prominent on Phone & Desktop) */}
+          {/* Top Header Submit Test Button */}
           <button
             onClick={confirmSubmit}
             disabled={submitting}
@@ -338,23 +346,25 @@ const ExamTaking = () => {
         <div className="lg:col-span-3 p-4 sm:p-8 overflow-y-auto space-y-6">
           
           {/* Question Header */}
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3 sm:pb-4">
+          <div className={`flex items-center justify-between border-b pb-3 sm:pb-4 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
             <div className="flex items-center gap-2 sm:gap-3">
-              <span className="px-2.5 py-1 rounded-lg bg-blue-600/20 text-blue-400 font-extrabold text-xs sm:text-sm border border-blue-500/30">
+              <span className="px-2.5 py-1 rounded-lg bg-blue-600/20 text-blue-500 font-extrabold text-xs sm:text-sm border border-blue-500/30">
                 Question {currentIndex + 1} of {questions.length}
               </span>
-              <span className="px-2 py-0.5 rounded text-[11px] sm:text-xs font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+              <span className="px-2 py-0.5 rounded text-[11px] sm:text-xs font-semibold bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
                 {currentQ?.subject}
               </span>
             </div>
 
             <div className="text-[11px] sm:text-xs text-slate-400">
-              Marks: <strong className="text-emerald-400">+{currentQ?.marksForCorrect || 4}</strong> / <strong className="text-rose-400">-{currentQ?.negativeMarksForIncorrect || 1}</strong>
+              Marks: <strong className="text-emerald-500">+{currentQ?.marksForCorrect || 4}</strong> / <strong className="text-rose-500">-{currentQ?.negativeMarksForIncorrect || 1}</strong>
             </div>
           </div>
 
           {/* Question Text */}
-          <div className="text-base sm:text-lg font-medium text-white leading-relaxed p-4 bg-slate-900/60 border border-slate-800 rounded-2xl">
+          <div className={`text-base sm:text-lg font-medium leading-relaxed p-5 border rounded-2xl shadow-sm transition-colors duration-300 ${
+            isDark ? 'bg-slate-900/80 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
+          }`}>
             <MathRenderer text={currentQ?.questionText} />
           </div>
 
@@ -366,14 +376,18 @@ const ExamTaking = () => {
                 <button
                   key={idx}
                   onClick={() => handleSelectOption(idx)}
-                  className={`w-full p-3.5 sm:p-4 rounded-xl border text-left flex items-center gap-3 transition-all ${
+                  className={`w-full p-3.5 sm:p-4 rounded-2xl border text-left flex items-center gap-3 transition-all ${
                     isSelected
-                      ? 'bg-blue-600/20 border-blue-500 text-white font-semibold ring-1 ring-blue-500'
-                      : 'bg-slate-900 border-slate-800/80 hover:border-slate-700 text-slate-200 hover:bg-slate-800/50'
+                      ? isDark 
+                        ? 'bg-blue-600/20 border-blue-500 text-white font-semibold ring-1 ring-blue-500' 
+                        : 'bg-blue-50 border-blue-500 text-slate-900 font-semibold ring-1 ring-blue-500'
+                      : isDark
+                        ? 'bg-slate-900 border-slate-800 hover:border-slate-700 text-slate-200 hover:bg-slate-800/50'
+                        : 'bg-white border-slate-200 hover:border-slate-300 text-slate-800 hover:bg-slate-50'
                   }`}
                 >
                   <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
-                    isSelected ? 'bg-blue-500 text-white' : 'bg-slate-800 text-slate-400 border border-slate-700'
+                    isSelected ? 'bg-blue-600 text-white' : isDark ? 'bg-slate-800 text-slate-400 border border-slate-700' : 'bg-slate-100 text-slate-600 border border-slate-200'
                   }`}>
                     {String.fromCharCode(65 + idx)}
                   </span>
@@ -388,9 +402,11 @@ const ExamTaking = () => {
         </div>
 
         {/* Question Palette Sidebar */}
-        <div className="bg-slate-900 border-l border-slate-800 p-4 sm:p-6 overflow-y-auto space-y-5">
+        <div className={`border-l p-4 sm:p-6 overflow-y-auto space-y-5 transition-colors duration-300 ${
+          isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
+        }`}>
           <div className="flex items-center justify-between">
-            <h3 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider">Question Paper Palette</h3>
+            <h3 className={`text-xs sm:text-sm font-bold uppercase tracking-wider ${isDark ? 'text-white' : 'text-slate-900'}`}>Question Paper Palette</h3>
             <button
               onClick={confirmSubmit}
               disabled={submitting}
@@ -401,23 +417,23 @@ const ExamTaking = () => {
           </div>
 
           {/* Status Legend */}
-          <div className="grid grid-cols-2 gap-2 text-[10px] sm:text-[11px] text-slate-300">
+          <div className="grid grid-cols-2 gap-2 text-[10px] sm:text-[11px] text-slate-400">
             <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded bg-emerald-500"></span> Answered
+              <span className="w-3 h-3 rounded bg-emerald-600"></span> Answered
             </div>
             <div className="flex items-center gap-2">
               <span className="w-3 h-3 rounded bg-purple-600"></span> Marked Review
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded bg-slate-700"></span> Unattempted
+              <span className="w-3 h-3 rounded bg-slate-300 dark:bg-slate-700"></span> Unattempted
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded ring-2 ring-blue-500 bg-slate-900"></span> Current
+              <span className="w-3 h-3 rounded ring-2 ring-blue-500 bg-blue-500/20"></span> Current
             </div>
           </div>
 
           {/* Palette Grid */}
-          <div className="pt-3 border-t border-slate-800">
+          <div className={`pt-3 border-t ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
             <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
               {questions.map((q, idx) => {
                 const state = userAnswers[q._id] || {};
@@ -425,7 +441,7 @@ const ExamTaking = () => {
                 const isAnswered = state.selectedOption !== null && state.selectedOption !== undefined;
                 const isReview = state.isMarkedForReview;
 
-                let bgColor = 'bg-slate-800 text-slate-300 hover:bg-slate-700';
+                let bgColor = isDark ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200';
                 if (isReview) {
                   bgColor = 'bg-purple-600 text-white';
                 } else if (isAnswered) {
@@ -437,7 +453,7 @@ const ExamTaking = () => {
                     key={q._id}
                     onClick={() => setCurrentIndex(idx)}
                     className={`h-9 sm:h-10 rounded-xl font-bold text-[11px] sm:text-xs flex items-center justify-center transition-all ${bgColor} ${
-                      isCurrent ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-slate-950 scale-105' : ''
+                      isCurrent ? 'ring-2 ring-blue-500 ring-offset-2 scale-105' : ''
                     }`}
                   >
                     {idx + 1}
@@ -450,8 +466,10 @@ const ExamTaking = () => {
 
       </div>
 
-      {/* PERMANENT FIXED GLOBAL FOOTER (Fully Responsive for Phone & Desktop) */}
-      <footer className="fixed bottom-0 left-0 right-0 h-16 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-2 sm:px-6 flex items-center justify-between z-40 shadow-2xl">
+      {/* PERMANENT FIXED GLOBAL FOOTER */}
+      <footer className={`fixed bottom-0 left-0 right-0 h-16 backdrop-blur-md border-t px-2 sm:px-6 flex items-center justify-between z-40 shadow-2xl transition-colors duration-300 ${
+        isDark ? 'bg-slate-900/95 border-slate-800 text-white' : 'bg-white/95 border-slate-200 text-slate-900'
+      }`}>
         {/* Left Actions */}
         <div className="flex items-center gap-1 sm:gap-2">
           <button
@@ -459,7 +477,7 @@ const ExamTaking = () => {
             className={`px-2.5 sm:px-4 py-2 rounded-xl text-[11px] sm:text-xs font-bold flex items-center gap-1 border transition-all ${
               currentState.isMarkedForReview
                 ? 'bg-purple-600 text-white border-purple-500 shadow-md shadow-purple-600/20'
-                : 'bg-slate-950 text-purple-400 border-purple-500/30 hover:bg-purple-500/10'
+                : isDark ? 'bg-slate-950 text-purple-400 border-purple-500/30 hover:bg-purple-500/10' : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
             }`}
           >
             <Flag className="w-3.5 h-3.5" />
@@ -470,7 +488,9 @@ const ExamTaking = () => {
           <button
             onClick={handleClearOption}
             disabled={currentState.selectedOption === null}
-            className="px-2.5 sm:px-4 py-2 bg-slate-950 hover:bg-slate-800 text-slate-400 rounded-xl text-[11px] sm:text-xs font-bold border border-slate-800 transition-colors disabled:opacity-40"
+            className={`px-2.5 sm:px-4 py-2 rounded-xl text-[11px] sm:text-xs font-bold border transition-colors disabled:opacity-40 ${
+              isDark ? 'bg-slate-950 hover:bg-slate-800 text-slate-400 border-slate-800' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+            }`}
           >
             <span className="hidden sm:inline">Clear Response</span>
             <span className="sm:hidden">Clear</span>
@@ -482,7 +502,9 @@ const ExamTaking = () => {
           <button
             onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
             disabled={currentIndex === 0}
-            className="px-2.5 sm:px-4 py-2 bg-slate-950 hover:bg-slate-800 text-slate-300 rounded-xl text-[11px] sm:text-xs font-bold border border-slate-800 disabled:opacity-40 flex items-center gap-1"
+            className={`px-2.5 sm:px-4 py-2 rounded-xl text-[11px] sm:text-xs font-bold border disabled:opacity-40 flex items-center gap-1 ${
+              isDark ? 'bg-slate-950 hover:bg-slate-800 text-slate-300 border-slate-800' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+            }`}
           >
             <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span className="hidden sm:inline">Previous</span>
@@ -512,13 +534,15 @@ const ExamTaking = () => {
 
       {/* Tab Switch Warning Modal Toast */}
       {showWarningModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-amber-500/40 p-6 rounded-2xl max-w-md w-full text-center space-y-4 shadow-2xl">
-            <div className="w-12 h-12 bg-amber-500/10 text-amber-400 rounded-full flex items-center justify-center mx-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className={`border p-6 rounded-2xl max-w-md w-full text-center space-y-4 shadow-2xl ${
+            isDark ? 'bg-slate-900 border-amber-500/40 text-white' : 'bg-white border-amber-500/40 text-slate-900'
+          }`}>
+            <div className="w-12 h-12 bg-amber-500/10 text-amber-500 rounded-full flex items-center justify-center mx-auto">
               <AlertTriangle className="w-6 h-6" />
             </div>
-            <h3 className="text-lg font-bold text-amber-400">Proctor Security Alert</h3>
-            <p className="text-xs text-slate-300 leading-relaxed">{warningMessage}</p>
+            <h3 className="text-lg font-bold text-amber-500">Proctor Security Alert</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">{warningMessage}</p>
             <button
               onClick={() => setShowWarningModal(false)}
               className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs"
